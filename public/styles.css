@@ -1,0 +1,212 @@
+/* ============================================================================
+   THPTQG 2026 Tiếng Anh — Real-Source Harvester & Exam Studio
+   Supplemental Academic Typography, Reading Highlights & Clean A4 Print Rules
+   (Paired with Tailwind CSS v3 mobile-first utilities)
+   ============================================================================ */
+
+html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Academic editorial serif for authentic English reading passages */
+.font-reading {
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-feature-settings: "kern" 1, "liga" 1;
+}
+
+/* Subtle custom scrollbars for console logs & answer sheet */
+.thin-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.45);
+    border-radius: 9999px;
+}
+
+/* Target vocabulary/pronoun highlights inside reading passages */
+.target-word {
+    font-weight: 700;
+    padding: 0.05rem 0.3rem;
+    border-radius: 0.25rem;
+    background-color: rgba(14, 165, 233, 0.14);
+    color: #0369a1;
+    border-bottom: 1.5px solid rgba(2, 132, 199, 0.55);
+}
+html.dark .target-word {
+    background-color: rgba(56, 189, 248, 0.18);
+    color: #7dd3fc;
+    border-bottom-color: rgba(125, 211, 252, 0.55);
+}
+
+/* Paraphrase underlined sentence */
+.paraphrase-underline {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4px;
+    text-decoration-color: #0d9488;
+    background-color: rgba(20, 184, 166, 0.08);
+    border-radius: 0.2rem;
+    padding: 0 0.12rem;
+}
+html.dark .paraphrase-underline {
+    text-decoration-color: #2dd4bf;
+    background-color: rgba(45, 212, 191, 0.12);
+}
+
+/* Sentence insertion markers [I], [II], [III], [IV] */
+.insert-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.8em;
+    font-weight: 800;
+    padding: 0.06rem 0.42rem;
+    margin: 0 0.18rem;
+    border-radius: 0.375rem;
+    background-color: #fef3c7;
+    color: #92400e;
+    border: 1px solid #f59e0b;
+    vertical-align: baseline;
+}
+html.dark .insert-marker {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #fcd34d;
+    border-color: rgba(245, 158, 11, 0.55);
+}
+
+/* Cloze numbered blanks (1) ______ */
+.cloze-blank {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.82em;
+    font-weight: 700;
+    padding: 0.04rem 0.45rem;
+    margin: 0 0.12rem;
+    border-radius: 0.375rem;
+    background-color: #f1f5f9;
+    color: #0f172a;
+    border-bottom: 2px solid #0284c7;
+}
+html.dark .cloze-blank {
+    background-color: #1e293b;
+    color: #e2e8f0;
+    border-bottom-color: #38bdf8;
+}
+
+/* Toast transitions */
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.toast-enter {
+    animation: toastIn 0.2s ease-out forwards;
+}
+
+/* ============================================================================
+   CLEAN A4 PRINT STYLESHEET (No UI clutter, crisp black ink on white paper)
+   ============================================================================ */
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 14mm 15mm;
+    }
+
+    html,
+    body {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        font-size: 11pt !important;
+        line-height: 1.48 !important;
+    }
+
+    .no-print,
+    header,
+    footer,
+    #storageStatusStrip,
+    #aiSetupBanner,
+    #harvesterControlSection,
+    #statsSection,
+    #historySection,
+    #emptyStateSection,
+    #practiceControlBar,
+    #practiceResultBanner,
+    #toastContainer,
+    .modal-backdrop {
+        display: none !important;
+    }
+
+    #examWorkspace {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .print-only-header {
+        display: block !important;
+    }
+
+    .print-card {
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        break-inside: avoid-page;
+    }
+
+    .question-item-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border-color: #e2e8f0 !important;
+        background: #ffffff !important;
+    }
+
+    .target-word {
+        background: transparent !important;
+        color: #000000 !important;
+        border-bottom: 1.5px solid #000000 !important;
+        padding: 0 !important;
+    }
+
+    .paraphrase-underline {
+        background: transparent !important;
+        text-decoration-color: #000000 !important;
+    }
+
+    .insert-marker,
+    .cloze-blank {
+        background: transparent !important;
+        color: #000000 !important;
+        border-color: #334155 !important;
+    }
+
+    body.print-exam-only #answersAndVocabSection,
+    body.print-exam-only .inline-explanation-box {
+        display: none !important;
+    }
+
+    body:not(.print-exam-only) #answersAndVocabSection {
+        display: block !important;
+        page-break-before: always;
+        break-before: page;
+    }
+}
