@@ -10,7 +10,7 @@ import {
     validateCustomBaseUrl,
     validateHarvestUrl
 } from "../lib/proxy-core.mjs";
-import { createAppServer } from "../server.mjs";
+import { createAppServer } from "../scripts/local-server.mjs";
 import {
     csprngHex,
     csprngInt,

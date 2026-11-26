@@ -7,11 +7,12 @@ import {
     getServerHealth,
     handleAiProxyRequest,
     handleHarvestProxyRequest
-} from "./lib/proxy-core.mjs";
+} from "../lib/proxy-core.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PUBLIC_DIR = path.join(__dirname, "public");
+const ROOT_DIR = path.resolve(__dirname, "..");
+const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 
 const MIME_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -27,7 +28,7 @@ const MIME_TYPES = {
 };
 
 /** Lightweight .env loader (zero external npm packages needed) */
-export function loadDotEnv(envPath = path.join(__dirname, ".env")) {
+export function loadDotEnv(envPath = path.join(ROOT_DIR, ".env")) {
     if (!fs.existsSync(envPath)) return;
     const raw = fs.readFileSync(envPath, "utf8");
     for (const line of raw.split(/\r?\n/)) {
@@ -171,7 +172,7 @@ export function createAppServer(env = process.env) {
     });
 }
 
-// Direct CLI execution
+// Direct CLI execution for local development (`npm start` / `npm run dev`)
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
     loadDotEnv();
     const port = Number(process.env.PORT || 3000);
