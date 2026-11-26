@@ -3,6 +3,7 @@
  * CEFR Difficulty Levels, and QĐ 764/QĐ-BGDĐT (GDPT 2018) 40-Question Exam Blueprint.
  */
 
+export const APP_BUILD_VERSION = "v2.2";
 export const DEFAULT_VAULT_KEY = "THPTQG-ANH-2026";
 
 export const STORAGE_KEYS = {
@@ -30,6 +31,8 @@ export const AI_PROVIDERS = {
             "gemini-3.5-flash-lite",
             "gemini-3.8-flash",
             "gemini-3.6-flash",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
             "gemini-4-hydrogen",
             "gemini-3-flash-preview"
         ],

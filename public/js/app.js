@@ -1,4 +1,4 @@
-import { AI_PROVIDERS, DEFAULT_VAULT_KEY, EXAM_SECTIONS_META, STORAGE_KEYS } from "./config.js";
+import { APP_BUILD_VERSION, AI_PROVIDERS, DEFAULT_VAULT_KEY, EXAM_SECTIONS_META, STORAGE_KEYS } from "./config.js";
 import { UnifiedAiClient } from "./ai-client.js";
 import { VaultStorageManager, parseFirebaseConfigInput } from "./storage.js";
 import { EnglishSourceHarvester } from "./harvester.js";
@@ -1817,7 +1817,7 @@ async function bootApp() {
         updateAiStatusBadges();
         const modeInfo = aiClient.getConnectionModeLabel();
         addLog(
-            `[Boot] Sẵn sàng · AI: ${modeInfo.label} (${modeInfo.detail}) · Proxy /api/harvest: ${aiClient.serverHealth.proxyAvailable ? "Bật" : "Static"}`,
+            `[Boot ${APP_BUILD_VERSION}] Sẵn sàng · AI: ${modeInfo.label} (${modeInfo.detail}) · Proxy /api/harvest & /api/ai: ${aiClient.serverHealth.proxyAvailable ? "Bật" : "Static"}`,
             "info"
         );
     });

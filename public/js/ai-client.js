@@ -191,6 +191,7 @@ export class UnifiedAiClient {
         this.settings = loadAiSettings();
         this.modelCooldowns = new Map();
         this.lastWorkingModel = null;
+        this.preferServerProxy = false;
         this.serverHealth = {
             checked: false,
             proxyAvailable: false,
@@ -483,8 +484,9 @@ export class UnifiedAiClient {
     async _invokeSingleModel({ provider, model, systemInstruction, prompt, responseSchema, useGoogleSearch, thinkingLevel, timeoutMs }) {
         const browserKey = this.getBrowserKey(provider);
         const useServerOnly = !browserKey && this.hasServerKeyFor(provider);
+        const useStickyProxy = Boolean(this.preferServerProxy && this.serverHealth.proxyAvailable);
 
-        if (useServerOnly) {
+        if (useServerOnly || useStickyProxy) {
             return this._callViaServerProxy({
                 provider,
                 model,
@@ -534,8 +536,9 @@ export class UnifiedAiClient {
             return await directCall();
         } catch (err) {
             // On mobile Chrome / ISP / Google edge 502 without CORS headers, direct browser fetch throws
-            // TypeError: Failed to fetch. Fall back seamlessly to same-origin /api/ai proxy when available.
+            // TypeError: Failed to fetch. Fall back seamlessly to same-origin /api/ai proxy for this and subsequent calls.
             if (isTransientNetworkError(err) && this.serverHealth.proxyAvailable) {
+                this.preferServerProxy = true;
                 this.onLog(
                     `[Mạng/CORS] Kết nối trực tiếp tới ${provider}/${model} bị gián đoạn (${err.message}) → Tự chuyển qua Server Proxy /api/ai...`,
                     "warn"
@@ -567,7 +570,7 @@ export class UnifiedAiClient {
         const allowSearch = Boolean(useGoogleSearch && provider === "gemini" && this.settings.useGoogleSearchFallback);
         const thinkingLevel = provider === "gemini" ? this.settings.thinkingLevel || "LOW" : null;
         const browserKey = this.getBrowserKey(provider);
-        const isServerProxyPrimary = !browserKey && this.hasServerKeyFor(provider);
+        const isServerProxyPrimary = (!browserKey && this.hasServerKeyFor(provider)) || Boolean(this.preferServerProxy && this.serverHealth.proxyAvailable);
 
         let lastError = null;
         for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
@@ -648,7 +651,7 @@ export class UnifiedAiClient {
                     }
 
                     if (isOverloadedOrLimited) {
-                        this.markModelCooldown(provider, model, 180000);
+                        this.markModelCooldown(provider, model, 45000);
                         if (hasMoreCandidates) {
                             const reason = isTimeout ? `phản hồi quá ${Math.round(timeoutMs / 1000)}s` : `tạm bận (${err.status})`;
                             this.onLog(`[AI Tự động] "${model}" ${reason} → chuyển sang "${candidateModels[mIdx + 1]}"...`, "warn");
@@ -677,6 +680,14 @@ export class UnifiedAiClient {
             }
         }
 
+        if (lastError && isTransientNetworkError(lastError)) {
+            const wrapped = new Error(
+                "Kết nối mạng tạm gián đoạn hoặc máy chủ Google AI đang quá tải (Failed to fetch). Hãy giữ sáng màn hình khi tạo đề, kiểm tra mạng 4G/Wi-Fi hoặc thử lại sau vài giây."
+            );
+            wrapped.isNetworkError = true;
+            wrapped.retryable = true;
+            throw wrapped;
+        }
         throw lastError || new Error("Không thể kết nối máy chủ AI biên soạn đề.");
     }
 

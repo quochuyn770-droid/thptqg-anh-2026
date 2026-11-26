@@ -881,7 +881,8 @@ ${formatSourceSeedBlock(clozeSeed, "Bài viết thật #1 cho Câu 18–22")}
 - Trường \`prompt\` cho câu 18–22 để chuỗi rỗng "". 4 phương án A, B, C, D là các mệnh đề/câu đầy đủ có độ dài tương đồng.
 
 === TỪ VỰNG ĐÁNG CHÚ Ý ===
-Trích xuất 6–8 từ vựng / cấu trúc / collocation tiêu biểu của Phần 3 & Phần 4 vào mảng vocabulary.`;
+Trích xuất 5–6 từ vựng / cấu trúc / collocation tiêu biểu của Phần 3 & Phần 4 vào mảng vocabulary.
+LƯU Ý TỐC ĐỘ: Mỗi trường \`explanationVi\` viết ngắn gọn, sắc bén đúng trọng tâm (1–2 câu Tiếng Việt) để tối ưu tốc độ sinh đề.`;
 
     const res = await aiClient.generate({
         systemInstruction: SYSTEM_INSTRUCTION_ENGLISH_2026,
