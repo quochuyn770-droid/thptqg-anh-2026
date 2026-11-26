@@ -6,10 +6,10 @@
     <title>THPTQG 2026 Tiếng Anh — Real-Source Harvester &amp; Exam Studio</title>
     <meta name="description" content="Website kéo ngữ liệu Tiếng Anh thực tế từ 7 nguồn mở uy tín (Wikipedia, OpenAlex, Europe PMC, The Guardian, ScienceDaily, The Conversation, NPR) và biên soạn đề thi THPTQG 2026 chuẩn GDPT 2018 (QĐ 764/QĐ-BGDĐT · 40 câu / 50 phút) kèm chế độ làm bài tương tác.">
 
-    <!-- Google Fonts: Be Vietnam Pro, Source Serif 4 (Reading Passages), JetBrains Mono -->
+    <!-- Google Fonts: Be Vietnam Pro (UI), Noto Serif (Academic Exam Paper & A4 Print), JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
 
     <!-- Tailwind CSS v3 CDN (Zero-build deployment for Vercel, Netlify & Local Node.js) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -20,7 +20,7 @@
                 extend: {
                     fontFamily: {
                         sans: ["Be Vietnam Pro", "system-ui", "-apple-system", "sans-serif"],
-                        serif: ["Source Serif 4", "Georgia", "serif"],
+                        serif: ["Times New Roman", "Noto Serif", "Georgia", "serif"],
                         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"]
                     }
                 }
@@ -403,14 +403,7 @@
         <!-- 5. GENERATED / LOADED EXAM WORKSPACE -->
         <section id="examWorkspace" class="hidden space-y-5">
 
-            <!-- Clean Print-Only Official Paper Header -->
-            <div class="print-only-header hidden border-b-2 border-slate-900 pb-3 mb-4 text-center">
-                <p class="text-xs font-bold uppercase tracking-wider">BỘ GIÁO DỤC VÀ ĐÀO TẠO — ĐỀ THI THỬ TỐT NGHIỆP THPT NĂM 2026</p>
-                <h2 class="text-lg font-extrabold uppercase mt-1">MÔN: TIẾNG ANH (CHƯƠNG TRÌNH GDPT 2018 · QĐ 764/QĐ-BGDĐT)</h2>
-                <p id="printExamHeaderMeta" class="text-xs mt-1 font-medium">Thời gian làm bài: 50 phút (không kể thời gian phát đề) · 40 câu trắc nghiệm · Mã đề: 401</p>
-            </div>
-
-            <!-- Exam Toolbar, Mode Switcher & Mobile-Safe Split Copy Bar -->
+            <!-- Exam Toolbar, Mode Switcher, Technical Metadata Toggle & Mobile-Safe Split Copy Bar -->
             <div class="no-print rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5 space-y-4">
                 <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                     <div class="space-y-1">
@@ -422,7 +415,7 @@
                         <p id="examMetaSub" class="text-xs text-slate-500 dark:text-slate-400">Đang tải thông tin đề...</p>
                     </div>
 
-                    <!-- Export .txt & Clean Print Buttons -->
+                    <!-- Export .txt & Clean A4 PDF Print Buttons -->
                     <div class="flex flex-wrap items-center gap-2">
                         <button id="btnDownloadTxt" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition min-h-[38px] cursor-pointer">
                             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -430,33 +423,40 @@
                             </svg>
                             <span>Tải tệp .txt</span>
                         </button>
-                        <button id="btnPrintExamOnly" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 transition min-h-[38px] cursor-pointer">
+                        <button id="btnPrintExamOnly" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-sm transition min-h-[38px] cursor-pointer">
                             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659"/>
                             </svg>
-                            <span>In chỉ Đề thi</span>
+                            <span>In / Xuất PDF (Chỉ đề)</span>
                         </button>
                         <button id="btnPrintFull" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 transition min-h-[38px] cursor-pointer">
-                            <span>In Đề + Đáp án</span>
+                            <span>In PDF (Đề + Đáp án)</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Workspace Mode Switcher -->
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <!-- Workspace Mode Switcher & Display Toggles -->
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                     <div class="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 gap-1 w-full sm:w-auto" role="tablist" aria-label="Chế độ xem hoặc làm bài">
                         <button id="btnModeView" type="button" data-workspace-mode="view" class="flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer">
-                            Xem toàn văn đề &amp; Đáp án
+                            Đề thi chuẩn &amp; Đáp án
                         </button>
                         <button id="btnModePractice" type="button" data-workspace-mode="practice" class="flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer">
                             Làm bài tương tác (50 phút)
                         </button>
                     </div>
 
-                    <label id="toggleInlineAnswerWrap" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer select-none">
-                        <input id="chkShowInlineAnswers" type="checkbox" class="rounded border-slate-300 text-sky-600 focus:ring-sky-500">
-                        <span>Hiện nhanh đáp án &amp; giải thích dưới từng câu</span>
-                    </label>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none" title="Mặc định tắt để đề sạch chuẩn BGDĐT và gọn khi in PDF">
+                            <input id="chkShowTechMeta" type="checkbox" class="rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+                            <span>Hiện nguồn &amp; Nhãn kỹ năng</span>
+                        </label>
+
+                        <label id="toggleInlineAnswerWrap" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                            <input id="chkShowInlineAnswers" type="checkbox" class="rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+                            <span>Hiện nhanh đáp án dưới từng câu</span>
+                        </label>
+                    </div>
                 </div>
 
                 <!-- Mobile-Safe Split Copy Buttons (2 Stacked Sheets SVG + Character Counters) -->
@@ -552,15 +552,15 @@
             <!-- Interactive Score Breakdown Card (Shown after grading) -->
             <div id="practiceResultBanner" class="no-print hidden rounded-2xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 shadow-sm p-4 sm:p-5 space-y-4"></div>
 
-            <!-- Authentic Sources Attribution Strip -->
-            <div id="examSourcesStrip" class="print-card rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-2"></div>
-
-            <!-- 6 EXAM SECTIONS (Q1-6, Q7-12, Q13-17, Q18-22, Q23-30, Q31-40) -->
-            <div id="examSectionsContainer" class="space-y-6"></div>
+            <!-- OFFICIAL ACADEMIC EXAM PAPER SHEET (Web & Clean 5–7 Page A4 Print) -->
+            <div id="examPaperSheet" class="exam-paper">
+                <div id="examOfficialHeader"></div>
+                <div id="examSectionsContainer"></div>
+            </div>
 
             <!-- ANSWER KEY, DETAILED VIETNAMESE EXPLANATIONS & VOCABULARY/COLLOCATIONS -->
             <div id="answersAndVocabSection" class="space-y-4">
-                <div class="rounded-2xl bg-slate-900 dark:bg-slate-800 text-white p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-700">
+                <div class="answers-banner-print rounded-2xl bg-slate-900 dark:bg-slate-800 text-white p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-700">
                     <div>
                         <h3 class="text-sm sm:text-base font-extrabold tracking-tight">
                             BẢNG ĐÁP ÁN 40 CÂU, GIẢI THÍCH TIẾNG VIỆT &amp; TỪ VỰNG ĐÁNG CHÚ Ý
@@ -583,8 +583,22 @@
                     </div>
                 </div>
 
-                <div id="answersContainer" class="print-card rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-6"></div>
+                <div id="answersContainer" class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-6"></div>
             </div>
+
+            <!-- COLLAPSIBLE AUTHENTIC SOURCES ATTRIBUTION (Bottom of Page, Hidden on Print) -->
+            <details id="examSourcesCollapsible" class="no-print rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                <summary class="px-4 py-3 flex items-center justify-between gap-2 cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-800/60 transition list-none">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">
+                            Nguồn ngữ liệu Tiếng Anh thực tế đã kéo bằng 128-bit CSPRNG
+                        </span>
+                        <span id="examSourcesCountBadge" class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[11px] font-bold shrink-0">0 bài nguồn</span>
+                    </div>
+                    <span class="text-[11px] font-semibold text-sky-700 dark:text-sky-400 shrink-0">Mở / Thu gọn ▾</span>
+                </summary>
+                <div id="examSourcesStrip" class="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2"></div>
+            </details>
         </section>
     </main>
 

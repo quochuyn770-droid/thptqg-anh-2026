@@ -1,7 +1,9 @@
 /* ============================================================================
-   THPTQG 2026 Tiếng Anh — Real-Source Harvester & Exam Studio
-   Supplemental Academic Typography, Reading Highlights & Clean A4 Print Rules
-   (Paired with Tailwind CSS v3 mobile-first utilities)
+   THPTQG 2026 Tiếng Anh — Official BGDĐT Academic Exam Sheet & A4 Print CSS
+   - Crisp 2-column official header & flat academic exam typography
+   - Adaptive A/B/C/D option grids (4-col / 2-col / 1-col)
+   - Toggleable technical metadata (hidden by default & always hidden on print)
+   - Compact 5–7 page A4 PDF layout with orphan/split pagination protection
    ============================================================================ */
 
 html {
@@ -15,9 +17,10 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Academic editorial serif for authentic English reading passages */
-.font-reading {
-    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+/* Academic editorial serif stack (Vietnamese-safe across Windows, macOS, Linux, Android) */
+.font-reading,
+.exam-paper {
+    font-family: "Times New Roman", "Noto Serif", Georgia, serif;
     font-feature-settings: "kern" 1, "liga" 1;
 }
 
@@ -34,77 +37,545 @@ body {
     border-radius: 9999px;
 }
 
-/* Target vocabulary/pronoun highlights inside reading passages */
-.target-word {
-    font-weight: 700;
-    padding: 0.05rem 0.3rem;
-    border-radius: 0.25rem;
-    background-color: rgba(14, 165, 233, 0.14);
-    color: #0369a1;
-    border-bottom: 1.5px solid rgba(2, 132, 199, 0.55);
-}
-html.dark .target-word {
-    background-color: rgba(56, 189, 248, 0.18);
-    color: #7dd3fc;
-    border-bottom-color: rgba(125, 211, 252, 0.55);
+/* ============================================================================
+   TOGGLEABLE TECHNICAL METADATA (Sources, Word Count, P1-P4, Skill Tags)
+   Hidden by default in Official Exam View; ALWAYS hidden on print.
+   ============================================================================ */
+.tech-meta-only,
+.tech-meta-block {
+    display: none;
 }
 
-/* Paraphrase underlined sentence */
+#examWorkspace.show-tech-meta .tech-meta-only {
+    display: inline-flex;
+}
+
+#examWorkspace.show-tech-meta .tech-meta-block {
+    display: flex;
+}
+
+/* ============================================================================
+   OFFICIAL ACADEMIC EXAM PAPER SHEET (#examPaperSheet)
+   ============================================================================ */
+.exam-paper {
+    background-color: #ffffff;
+    color: #111827;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.75rem;
+    box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+    padding: 1.25rem 1rem 1.75rem;
+    font-size: 15px;
+    line-height: 1.54;
+}
+
+@media (min-width: 640px) {
+    .exam-paper {
+        padding: 2rem 2.35rem 2.5rem;
+        font-size: 15.5px;
+        line-height: 1.56;
+    }
+}
+
+html.dark .exam-paper {
+    background-color: #0f172a;
+    color: #e5e7eb;
+    border-color: #334155;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* Official 2-Column BGDĐT Header */
+.exam-paper-header {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    align-items: start;
+    padding-bottom: 0.85rem;
+    margin-bottom: 1.1rem;
+    border-bottom: 1.5px solid #111827;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+@media (min-width: 640px) {
+    .exam-paper-header {
+        grid-template-columns: 1fr 1.08fr;
+        gap: 1rem;
+    }
+}
+
+html.dark .exam-paper-header {
+    border-bottom-color: #64748b;
+}
+
+.exam-header-left,
+.exam-header-right {
+    text-align: center;
+}
+
+.exam-header-kicker {
+    font-size: 0.92em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    line-height: 1.3;
+}
+
+.exam-header-subject {
+    font-size: 0.98em;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-top: 0.12rem;
+    line-height: 1.3;
+}
+
+.exam-header-rule {
+    width: 6.5rem;
+    height: 1.5px;
+    background-color: currentColor;
+    margin: 0.38rem auto 0;
+    opacity: 0.85;
+}
+
+.exam-header-duration {
+    font-size: 0.9em;
+    font-style: italic;
+    line-height: 1.35;
+}
+
+.exam-code-box {
+    display: inline-block;
+    margin-top: 0.4rem;
+    padding: 0.18rem 0.85rem;
+    border: 1.5px solid #111827;
+    border-radius: 0;
+    font-weight: 700;
+    font-size: 0.95em;
+    letter-spacing: 0.02em;
+}
+
+html.dark .exam-code-box {
+    border-color: #cbd5e1;
+}
+
+/* ============================================================================
+   SECTIONS, INSTRUCTIONS & PASSAGES
+   ============================================================================ */
+.exam-section-block {
+    margin-bottom: 1.15rem;
+}
+
+.exam-section-block:last-child {
+    margin-bottom: 0;
+}
+
+.exam-instruction-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+.exam-instruction {
+    font-style: italic;
+    font-weight: 700;
+    line-height: 1.44;
+    margin: 0;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+.section-copy-btn {
+    font-family: "Be Vietnam Pro", system-ui, sans-serif;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 0.45rem;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.section-copy-btn:hover {
+    background: #e2e8f0;
+    border-color: #94a3b8;
+}
+
+html.dark .section-copy-btn {
+    background: #1e293b;
+    border-color: #475569;
+    color: #cbd5e1;
+}
+
+html.dark .section-copy-btn:hover {
+    background: #334155;
+}
+
+/* Sharp Rectangular Frame for Part 1 (Ad) & Part 2 (Leaflet) */
+.cloze-boxed-passage {
+    border: 1.25px solid #1f2937;
+    border-radius: 0;
+    padding: 0.75rem 1.05rem;
+    margin: 0.4rem 0 0.75rem;
+    background-color: #fcfcfd;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+html.dark .cloze-boxed-passage {
+    border-color: #64748b;
+    background-color: rgba(30, 41, 59, 0.45);
+}
+
+/* Open Academic Passage Container for Part 4, 5, 6 */
+.exam-reading-passage {
+    margin: 0.35rem 0 0.7rem;
+}
+
+.passage-title {
+    text-align: center;
+    font-weight: 700;
+    font-size: 1.04em;
+    letter-spacing: 0.015em;
+    line-height: 1.35;
+    margin: 0 0 0.25rem;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+.passage-subtitle {
+    text-align: center;
+    font-style: italic;
+    font-size: 0.94em;
+    margin: 0 0 0.45rem;
+    opacity: 0.9;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+.passage-meta-row {
+    font-family: "Be Vietnam Pro", system-ui, sans-serif;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    margin-bottom: 0.45rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px dashed #cbd5e1;
+}
+
+html.dark .passage-meta-row {
+    border-bottom-color: #334155;
+}
+
+.cloze-passage-body,
+.reading-paragraph {
+    text-align: justify;
+    margin: 0 0 0.48rem;
+    orphans: 3;
+    widows: 3;
+}
+
+.cloze-passage-body {
+    margin-bottom: 0;
+}
+
+.reading-paragraph:last-child {
+    margin-bottom: 0;
+}
+
+/* ============================================================================
+   SEAMLESS INLINE READING & CLOZE HIGHLIGHTS (Zero Pill Gaps or Line Breaks)
+   ============================================================================ */
+
+/* Cloze numbered blanks: (1) ______ inline with running text */
+.cloze-blank {
+    display: inline;
+    font-weight: 700;
+    white-space: nowrap;
+    letter-spacing: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+}
+
+/* Target vocabulary (CLOSEST / OPPOSITE) & Pronoun reference */
+.target-word {
+    font-weight: 700;
+    background-color: rgba(14, 165, 233, 0.11);
+    border-radius: 2px;
+    padding: 0 0.12em;
+    color: #0c4a6e;
+}
+
+html.dark .target-word {
+    background-color: rgba(56, 189, 248, 0.18);
+    color: #bae6fd;
+}
+
+/* Underlined paraphrase sentence (<u>) */
 .paraphrase-underline {
     text-decoration: underline;
-    text-decoration-thickness: 2px;
-    text-underline-offset: 4px;
-    text-decoration-color: #0d9488;
-    background-color: rgba(20, 184, 166, 0.08);
-    border-radius: 0.2rem;
-    padding: 0 0.12rem;
+    text-decoration-thickness: 1.4px;
+    text-underline-offset: 3px;
+    text-decoration-color: #0f766e;
+    background-color: rgba(20, 184, 166, 0.07);
+    border-radius: 2px;
 }
+
 html.dark .paraphrase-underline {
     text-decoration-color: #2dd4bf;
-    background-color: rgba(45, 212, 191, 0.12);
+    background-color: rgba(45, 212, 191, 0.1);
 }
 
 /* Sentence insertion markers [I], [II], [III], [IV] */
 .insert-marker {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.8em;
-    font-weight: 800;
-    padding: 0.06rem 0.42rem;
-    margin: 0 0.18rem;
-    border-radius: 0.375rem;
-    background-color: #fef3c7;
-    color: #92400e;
-    border: 1px solid #f59e0b;
-    vertical-align: baseline;
-}
-html.dark .insert-marker {
-    background-color: rgba(245, 158, 11, 0.2);
-    color: #fcd34d;
-    border-color: rgba(245, 158, 11, 0.55);
+    display: inline;
+    font-weight: 700;
+    white-space: nowrap;
+    color: #b45309;
+    padding: 0 0.08em;
 }
 
-/* Cloze numbered blanks (1) ______ */
-.cloze-blank {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.82em;
-    font-weight: 700;
-    padding: 0.04rem 0.45rem;
-    margin: 0 0.12rem;
-    border-radius: 0.375rem;
-    background-color: #f1f5f9;
-    color: #0f172a;
-    border-bottom: 2px solid #0284c7;
+html.dark .insert-marker {
+    color: #fbbf24;
 }
-html.dark .cloze-blank {
-    background-color: #1e293b;
-    color: #e2e8f0;
-    border-bottom-color: #38bdf8;
+
+/* ============================================================================
+   FLAT ACADEMIC QUESTIONS & ADAPTIVE OPTION GRIDS
+   ============================================================================ */
+.exam-questions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.42rem;
+}
+
+.exam-question-block {
+    padding: 0.25rem 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.question-header-line {
+    display: block;
+    margin-bottom: 0.16rem;
+    text-align: justify;
+}
+
+.question-number-label {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.question-stem-text {
+    font-weight: 400;
+}
+
+.question-skill-pill {
+    font-family: "Be Vietnam Pro", system-ui, sans-serif;
+    align-items: center;
+    padding: 0.05rem 0.4rem;
+    border-radius: 0.3rem;
+    font-size: 10.5px;
+    font-weight: 600;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    margin-left: 0.2rem;
+}
+
+html.dark .question-skill-pill {
+    background: #1e293b;
+    color: #94a3b8;
+    border-color: #334155;
+}
+
+/* Part 3 Arrangement (Dialogues, Letter, Paragraphs) */
+.arrangement-items {
+    padding-left: 0.65rem;
+    margin: 0.14rem 0 0.32rem;
+}
+
+.arrangement-salutation {
+    font-style: italic;
+    margin: 0 0 0.16rem;
+}
+
+.arrangement-item-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    margin-bottom: 0.12rem;
+    text-align: justify;
+}
+
+.arrangement-item-label {
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.arrangement-signoff {
+    font-style: italic;
+    white-space: pre-line;
+    margin: 0.18rem 0 0;
+}
+
+/* Adaptive Option Grids:
+   <= 20 chars -> 4 cols x 1 row (2 cols on tiny phones < 420px)
+   21–55 chars -> 2 cols x 2 rows (1 col on tiny phones < 420px)
+   > 55 chars  -> 1 col x 4 rows always */
+.exam-options-grid {
+    display: grid;
+    column-gap: 1rem;
+    row-gap: 0.16rem;
+    padding-left: 0.15rem;
+}
+
+.opt-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.opt-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.opt-grid-1 {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@media screen and (max-width: 419px) {
+    .opt-grid-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 0.65rem;
+    }
+    .opt-grid-2 {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Flat Option Text Item (Both View & Interactive Practice Modes) */
+.exam-option-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.32rem;
+    text-align: left;
+    width: 100%;
+    padding: 0.14rem 0.32rem;
+    border-radius: 0.35rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.45;
+    transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.exam-option-item.is-interactive {
+    cursor: pointer;
+    padding: 0.28rem 0.45rem;
+    min-height: 34px;
+}
+
+.exam-option-item.is-interactive:hover:not(:disabled) {
+    background-color: rgba(14, 165, 233, 0.08);
+    border-color: rgba(14, 165, 233, 0.35);
+}
+
+.exam-option-item:disabled {
+    cursor: default;
+}
+
+.exam-option-item .opt-letter {
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.exam-option-item .opt-text {
+    word-break: break-word;
+}
+
+/* Practice & Inline Answer Highlights */
+.exam-option-item.is-selected {
+    background-color: rgba(14, 165, 233, 0.13);
+    border-color: #0284c7;
+    color: #0c4a6e;
+}
+
+html.dark .exam-option-item.is-selected {
+    background-color: rgba(56, 189, 248, 0.16);
+    border-color: #38bdf8;
+    color: #e0f2fe;
+}
+
+.exam-option-item.is-selected .opt-letter {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.exam-option-item.is-correct,
+.exam-option-item.is-inline-correct {
+    background-color: rgba(16, 185, 129, 0.13);
+    border-color: #059669;
+    color: #064e3b;
+}
+
+html.dark .exam-option-item.is-correct,
+html.dark .exam-option-item.is-inline-correct {
+    background-color: rgba(16, 185, 129, 0.18);
+    border-color: #34d399;
+    color: #d1fae5;
+}
+
+.exam-option-item.is-wrong {
+    background-color: rgba(244, 63, 94, 0.12);
+    border-color: #e11d48;
+    color: #881337;
+}
+
+html.dark .exam-option-item.is-wrong {
+    background-color: rgba(244, 63, 94, 0.18);
+    border-color: #fb7185;
+    color: #ffe4e6;
+}
+
+/* Inline explanation shown under a question when toggled or after grading */
+.inline-explanation-box {
+    font-family: "Be Vietnam Pro", system-ui, sans-serif;
+    margin-top: 0.32rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 0.5rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #334155;
+}
+
+html.dark .inline-explanation-box {
+    background-color: rgba(30, 41, 59, 0.75);
+    border-color: #334155;
+    color: #cbd5e1;
+}
+
+/* Official End-of-Exam Footer inside Paper Sheet */
+.exam-end-divider {
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin-top: 1.15rem;
+    padding-top: 0.65rem;
+    border-top: 1px dashed #94a3b8;
+    font-size: 0.95em;
 }
 
 /* Toast transitions */
@@ -123,23 +594,39 @@ html.dark .cloze-blank {
 }
 
 /* ============================================================================
-   CLEAN A4 PRINT STYLESHEET (No UI clutter, crisp black ink on white paper)
+   OFFICIAL A4 PRINT STYLESHEET (5–7 Pages, Pure Black Ink on White Paper)
    ============================================================================ */
 @media print {
     @page {
         size: A4 portrait;
-        margin: 14mm 15mm;
+        margin: 15mm;
     }
 
     html,
-    body {
+    body,
+    html.dark,
+    html.dark body {
         background: #ffffff !important;
-        color: #0f172a !important;
+        color: #000000 !important;
+        font-family: "Times New Roman", "Noto Serif", Georgia, serif !important;
         font-size: 11pt !important;
-        line-height: 1.48 !important;
+        line-height: 1.42 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 
+    main {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Hide all interactive UI chrome, toolbars, navigation, modals, sources & technical metadata */
     .no-print,
+    .tech-meta-only,
+    .tech-meta-block,
     header,
     footer,
     #storageStatusStrip,
@@ -150,6 +637,7 @@ html.dark .cloze-blank {
     #emptyStateSection,
     #practiceControlBar,
     #practiceResultBanner,
+    #examSourcesCollapsible,
     #toastContainer,
     .modal-backdrop {
         display: none !important;
@@ -161,44 +649,208 @@ html.dark .cloze-blank {
         padding: 0 !important;
     }
 
-    .print-only-header {
-        display: block !important;
-    }
-
-    .print-card {
+    .exam-paper,
+    html.dark .exam-paper {
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: none !important;
+        border-radius: 0 !important;
         box-shadow: none !important;
-        border: 1px solid #cbd5e1 !important;
-        background: #ffffff !important;
-        color: #0f172a !important;
-        break-inside: avoid-page;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: 11pt !important;
+        line-height: 1.42 !important;
     }
 
-    .question-item-card {
-        break-inside: avoid;
-        page-break-inside: avoid;
-        border-color: #e2e8f0 !important;
-        background: #ffffff !important;
+    /* Always 2 columns in print, even when triggered from mobile browser */
+    .exam-paper-header,
+    html.dark .exam-paper-header {
+        display: grid !important;
+        grid-template-columns: 1fr 1.08fr !important;
+        gap: 8pt !important;
+        padding-bottom: 5pt !important;
+        margin-bottom: 6pt !important;
+        border-bottom: 1.2pt solid #000000 !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
     }
 
-    .target-word {
+    .exam-header-duration {
+        font-size: 10pt !important;
+        white-space: nowrap !important;
+    }
+
+    .exam-code-box,
+    html.dark .exam-code-box {
+        border: 1.2pt solid #000000 !important;
+        color: #000000 !important;
+        padding: 1.5pt 8pt !important;
+        margin-top: 2.5pt !important;
+    }
+
+    .exam-section-block {
+        margin-bottom: 5.5pt !important;
+    }
+
+    .exam-instruction-row {
+        display: block !important;
+        margin-bottom: 3pt !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+    }
+
+    .exam-instruction {
+        font-size: 10.5pt !important;
+        line-height: 1.36 !important;
+        color: #000000 !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+    }
+
+    /* Sharp framed box for Part 1 Ad & Part 2 Leaflet */
+    .cloze-boxed-passage,
+    html.dark .cloze-boxed-passage {
+        border: 0.95pt solid #000000 !important;
+        border-radius: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        padding: 5pt 8.5pt !important;
+        margin: 2.5pt 0 4.5pt !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    .exam-reading-passage {
+        margin: 2pt 0 4.5pt !important;
+    }
+
+    .passage-title,
+    .passage-subtitle {
+        color: #000000 !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+    }
+
+    .passage-title {
+        font-size: 11.2pt !important;
+        margin-bottom: 1.5pt !important;
+    }
+
+    .passage-subtitle {
+        font-size: 10.2pt !important;
+        margin-bottom: 2.5pt !important;
+    }
+
+    .reading-paragraph {
+        text-align: justify !important;
+        text-indent: 14pt !important;
+        margin: 0 0 3pt !important;
+        orphans: 3 !important;
+        widows: 3 !important;
+        color: #000000 !important;
+    }
+
+    .cloze-passage-body {
+        text-align: justify !important;
+        color: #000000 !important;
+    }
+
+    /* Pure crisp black-and-white highlights */
+    .target-word,
+    html.dark .target-word {
         background: transparent !important;
         color: #000000 !important;
-        border-bottom: 1.5px solid #000000 !important;
+        font-weight: 700 !important;
         padding: 0 !important;
+        border: none !important;
     }
 
-    .paraphrase-underline {
+    .paraphrase-underline,
+    html.dark .paraphrase-underline {
         background: transparent !important;
+        color: #000000 !important;
+        text-decoration: underline !important;
+        text-decoration-thickness: 0.85pt !important;
+        text-underline-offset: 2pt !important;
         text-decoration-color: #000000 !important;
     }
 
     .insert-marker,
-    .cloze-blank {
+    html.dark .insert-marker,
+    .cloze-blank,
+    html.dark .cloze-blank {
         background: transparent !important;
         color: #000000 !important;
-        border-color: #334155 !important;
+        font-weight: 700 !important;
+        border: none !important;
+        padding: 0 !important;
     }
 
+    /* Compact Question & Option Spacing */
+    .exam-questions-list {
+        gap: 1.8pt !important;
+    }
+
+    .exam-question-block {
+        padding: 1pt 0 !important;
+        margin: 0 !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    .question-header-line {
+        margin-bottom: 0.8pt !important;
+    }
+
+    .arrangement-items {
+        padding-left: 8pt !important;
+        margin: 1pt 0 1.5pt !important;
+    }
+
+    .arrangement-item-row {
+        margin-bottom: 0.8pt !important;
+    }
+
+    .exam-options-grid {
+        column-gap: 8pt !important;
+        row-gap: 0.8pt !important;
+        padding-left: 0 !important;
+    }
+
+    .opt-grid-4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+
+    .opt-grid-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .opt-grid-1 {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .exam-option-item,
+    .exam-option-item.is-interactive,
+    .exam-option-item.is-selected,
+    .exam-option-item.is-correct,
+    .exam-option-item.is-wrong,
+    .exam-option-item.is-inline-correct {
+        background: transparent !important;
+        border: none !important;
+        color: #000000 !important;
+        padding: 0.35pt 0 !important;
+        min-height: 0 !important;
+        line-height: 1.36 !important;
+    }
+
+    .exam-end-divider {
+        margin-top: 6pt !important;
+        padding-top: 3pt !important;
+        border-top: 0.75pt dashed #000000 !important;
+        color: #000000 !important;
+    }
+
+    /* Print Exam Only vs Print Exam + Answers */
     body.print-exam-only #answersAndVocabSection,
     body.print-exam-only .inline-explanation-box {
         display: none !important;
@@ -206,7 +858,98 @@ html.dark .cloze-blank {
 
     body:not(.print-exam-only) #answersAndVocabSection {
         display: block !important;
-        page-break-before: always;
-        break-before: page;
+        page-break-before: always !important;
+        break-before: page !important;
+        margin-top: 0 !important;
+    }
+
+    .answers-banner-print {
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: none !important;
+        border-bottom: 1.2pt solid #000000 !important;
+        border-radius: 0 !important;
+        padding: 0 0 4pt !important;
+        margin-bottom: 6pt !important;
+    }
+
+    .answers-banner-print p {
+        color: #000000 !important;
+    }
+
+    #answersContainer,
+    html.dark #answersContainer {
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        font-size: 10pt !important;
+        line-height: 1.38 !important;
+    }
+
+    .answer-key-grid {
+        display: grid !important;
+        grid-template-columns: repeat(10, minmax(0, 1fr)) !important;
+        gap: 3pt !important;
+        break-inside: avoid !important;
+    }
+
+    .answer-key-cell {
+        border: 0.6pt solid #000000 !important;
+        border-radius: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        padding: 2.5pt 1pt !important;
+        text-align: center !important;
+    }
+
+    .answer-key-cell * {
+        color: #000000 !important;
+    }
+
+    .answer-key-cell > div:last-child {
+        font-weight: 700 !important;
+    }
+
+    .print-explain-item {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 0.4pt dotted #94a3b8 !important;
+        border-radius: 0 !important;
+        padding: 2pt 0 !important;
+        color: #000000 !important;
+        break-inside: avoid !important;
+    }
+
+    .print-explain-item * {
+        color: #000000 !important;
+        background: transparent !important;
+    }
+
+    .print-explain-item > span:first-child {
+        font-weight: 700 !important;
+    }
+
+    #answersContainer table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        border: 0.75pt solid #000000 !important;
+        font-size: 9.5pt !important;
+    }
+
+    #answersContainer th,
+    #answersContainer td {
+        display: table-cell !important;
+        border: 0.5pt solid #475569 !important;
+        color: #000000 !important;
+        background: #ffffff !important;
+        padding: 2.5pt 5pt !important;
+        text-align: left !important;
+    }
+
+    #answersContainer tr {
+        break-inside: avoid !important;
     }
 }

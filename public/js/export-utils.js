@@ -1,3 +1,5 @@
+import { cleanClozeQuestionPrompt, ensureReadingPassageHighlights } from "./exam-pipeline.js";
+
 /**
  * Plain-Text Serializers for Mobile-Safe Split Copy Buttons
  * (Copy Câu 1–17, Copy Câu 18–30, Copy Câu 31–40, Copy Đáp án & Giải thích)
@@ -5,10 +7,19 @@
  */
 
 export function formatPassageForPlainText(text) {
-    return String(text || "")
-        .replace(/__([^_]+)__/g, "«$1»")
+    const blanks = [];
+    let s = String(text || "").replace(/\((\d{1,2})\)\s*_{2,}/g, (_, n) => {
+        const idx = blanks.length;
+        blanks.push(`(${n}) ______`);
+        return `\uE000CLOZE${idx}\uE001`;
+    });
+    s = s
+        .replace(/<u>([\s\S]*?)<\/u>/gi, "«$1»")
+        .replace(/(^|[^_])__(?!_|\s)([^_]+?)__(?!_)/g, "$1«$2»")
+        .replace(/<(?:b|strong)>([\s\S]*?)<\/(?:b|strong)>/gi, "**$1**")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
+    return s.replace(/\uE000CLOZE(\d+)\uE001/g, (_, idx) => blanks[Number(idx)] || "");
 }
 
 export function getAllExamQuestions(exam) {
@@ -24,16 +35,25 @@ export function getAllExamQuestions(exam) {
 }
 
 function formatMcqQuestionTxt(q) {
-    const lines = [`Question ${q.number}: ${formatPassageForPlainText(q.prompt || "")}`];
-    lines.push(`A. ${q.optionA || ""}`);
-    lines.push(`B. ${q.optionB || ""}`);
-    lines.push(`C. ${q.optionC || ""}`);
-    lines.push(`D. ${q.optionD || ""}`);
-    return lines.join("\n");
+    const cleanStem = cleanClozeQuestionPrompt(q.prompt, q.number);
+    const header = cleanStem ? `Question ${q.number}. ${formatPassageForPlainText(cleanStem)}` : `Question ${q.number}.`;
+    const opts = [q.optionA || "", q.optionB || "", q.optionC || "", q.optionD || ""];
+    const maxLen = Math.max(...opts.map((o) => o.length));
+
+    if (maxLen <= 20) {
+        return `${header}\nA. ${opts[0]}    B. ${opts[1]}    C. ${opts[2]}    D. ${opts[3]}`;
+    }
+    return [
+        header,
+        `A. ${opts[0]}`,
+        `B. ${opts[1]}`,
+        `C. ${opts[2]}`,
+        `D. ${opts[3]}`
+    ].join("\n");
 }
 
 function formatArrangementQuestionTxt(q) {
-    const lines = [`Question ${q.number}:`];
+    const lines = [`Question ${q.number}.`];
     if (q.salutation) lines.push(q.salutation);
     for (const it of q.items || []) {
         lines.push(`${it.label}. ${it.text}`);
@@ -56,35 +76,32 @@ export function buildSectionText(exam, sectionId) {
 
     if (sectionId === "part1") {
         const lines = [
-            "=== PHẦN 1: ĐỌC ĐIỀN QUẢNG CÁO / THÔNG BÁO (CÂU 1–6) ===",
             sec.instruction || "",
             "",
             (sec.title || "").toUpperCase(),
             sec.subtitle ? sec.subtitle : "",
             formatPassageForPlainText(sec.passage),
-            ""
-        ].filter((v, idx) => idx === 0 || idx === 2 || v !== "");
-        lines.push((sec.questions || []).map(formatMcqQuestionTxt).join("\n\n"));
+            "",
+            (sec.questions || []).map(formatMcqQuestionTxt).join("\n\n")
+        ].filter((v, idx) => idx === 1 || idx === 5 || v !== "");
         return lines.join("\n").trim();
     }
 
     if (sectionId === "part2") {
         const lines = [
-            "=== PHẦN 2: ĐỌC ĐIỀN TỜ RƠI / HƯỚNG DẪN (CÂU 7–12) ===",
             sec.instruction || "",
             "",
             (sec.title || "").toUpperCase(),
             sec.subtitle ? sec.subtitle : "",
             formatPassageForPlainText(sec.passage),
-            ""
-        ].filter((v, idx) => idx === 0 || idx === 2 || v !== "");
-        lines.push((sec.questions || []).map(formatMcqQuestionTxt).join("\n\n"));
+            "",
+            (sec.questions || []).map(formatMcqQuestionTxt).join("\n\n")
+        ].filter((v, idx) => idx === 1 || idx === 5 || v !== "");
         return lines.join("\n").trim();
     }
 
     if (sectionId === "part3") {
         const lines = [
-            "=== PHẦN 3: SẮP XẾP HỘI THOẠI, THƯ & ĐOẠN VĂN (CÂU 13–17) ===",
             sec.instruction || "",
             "",
             (sec.questions || []).map(formatArrangementQuestionTxt).join("\n\n")
@@ -95,7 +112,6 @@ export function buildSectionText(exam, sectionId) {
     if (sectionId === "part4") {
         const srcLine = formatSourceLine(sec.source);
         const lines = [
-            "=== PHẦN 4: ĐỌC ĐIỀN KHUYẾT CÂU / MỆNH ĐỀ (CÂU 18–22) ===",
             sec.instruction || "",
             srcLine,
             "",
@@ -107,27 +123,11 @@ export function buildSectionText(exam, sectionId) {
         return lines.join("\n").trim();
     }
 
-    if (sectionId === "part5") {
+    if (sectionId === "part5" || sectionId === "part6") {
         const srcLine = formatSourceLine(sec.source);
-        const body = (sec.paragraphs || []).map(formatPassageForPlainText).join("\n\n");
+        const safeParas = ensureReadingPassageHighlights(sec.paragraphs || [], sec.questions || []);
+        const body = safeParas.map(formatPassageForPlainText).join("\n\n");
         const lines = [
-            "=== PHẦN 5: ĐỌC HIỂU ĐOẠN NGẮN (CÂU 23–30) ===",
-            sec.instruction || "",
-            srcLine,
-            "",
-            (sec.title || "").toUpperCase(),
-            body,
-            "",
-            (sec.questions || []).map(formatMcqQuestionTxt).join("\n\n")
-        ].filter(Boolean);
-        return lines.join("\n").trim();
-    }
-
-    if (sectionId === "part6") {
-        const srcLine = formatSourceLine(sec.source);
-        const body = (sec.paragraphs || []).map(formatPassageForPlainText).join("\n\n");
-        const lines = [
-            "=== PHẦN 6: ĐỌC HIỂU ĐOẠN DÀI (CÂU 31–40) ===",
             sec.instruction || "",
             srcLine,
             "",
@@ -146,7 +146,7 @@ export function buildSectionText(exam, sectionId) {
 export function buildSlice1To17Text(exam) {
     if (!exam) return "";
     return [
-        `ĐỀ THI THỬ THPTQG 2026 MÔN TIẾNG ANH (QĐ 764/QĐ-BGDĐT) — MÃ ĐỀ ${exam.examCode || "401"}`,
+        `KỲ THI TỐT NGHIỆP THPT NĂM 2026 — MÔN TIẾNG ANH (QĐ 764/QĐ-BGDĐT) — MÃ ĐỀ ${exam.examCode || "401"}`,
         `Mức độ: ${exam.difficultyLabel || "Chuẩn BGD (B1–B2)"} | Thời gian: 50 phút | CÂU 1–17`,
         "----------------------------------------------------------------------",
         "",
@@ -230,18 +230,10 @@ export function buildFullTxtExamDocument(exam) {
 
     return [
         "======================================================================",
-        "  ĐỀ THI THỬ TỐT NGHIỆP THPT NĂM 2026 — MÔN TIẾNG ANH",
+        "  KỲ THI TỐT NGHIỆP THPT NĂM 2026 — ĐỀ THI THỬ MÔN: TIẾNG ANH",
         "  Cấu trúc GDPT 2018 (QĐ 764/QĐ-BGDĐT) · 40 câu trắc nghiệm · 50 phút",
-        `  MÃ ĐỀ: ${exam.examCode || "401"} | Mức độ: ${exam.difficultyLabel || "Chuẩn BGD (B1–B2)"}`,
+        `  MÃ ĐỀ THI: ${exam.examCode || "401"} | Mức độ: ${exam.difficultyLabel || "Chuẩn BGD (B1–B2)"}`,
         "======================================================================",
-        "",
-        "NGUỒN NGỮ LIỆU TIẾNG ANH THỰC TẾ ĐƯỢC SỬ DỤNG:",
-        sourcesBlock || "- Tổng hợp nguồn tiếng Anh mở",
-        "",
-        "Ghi chú ký hiệu trong bản .txt:",
-        "- **từ** : Từ/cụm từ/đại từ được in đậm trong đề thi gốc.",
-        "- «câu»  : Câu được gạch chân phục vụ câu hỏi Paraphrase.",
-        "- [I], [II], [III], [IV] : Vị trí chèn câu trong bài đọc dài.",
         "",
         buildSectionText(exam, "part1"),
         "",
@@ -257,6 +249,10 @@ export function buildFullTxtExamDocument(exam) {
         "",
         "======================================================================",
         "",
-        buildAnswersAndExplanationsText(exam)
+        buildAnswersAndExplanationsText(exam),
+        "",
+        "----------------------------------------------------------------------",
+        "NGUỒN NGỮ LIỆU TIẾNG ANH THỰC TẾ ĐÃ SỬ DỤNG:",
+        sourcesBlock || "- Tổng hợp nguồn tiếng Anh mở"
     ].join("\n").trim();
 }

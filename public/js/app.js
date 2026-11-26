@@ -2,7 +2,13 @@ import { AI_PROVIDERS, DEFAULT_VAULT_KEY, EXAM_SECTIONS_META, STORAGE_KEYS } fro
 import { UnifiedAiClient } from "./ai-client.js";
 import { VaultStorageManager, parseFirebaseConfigInput } from "./storage.js";
 import { EnglishSourceHarvester } from "./harvester.js";
-import { runFullEnglishExamPipeline, gradeInteractiveExam } from "./exam-pipeline.js";
+import {
+    runFullEnglishExamPipeline,
+    gradeInteractiveExam,
+    computeAdaptiveOptionLayout,
+    cleanClozeQuestionPrompt,
+    ensureReadingPassageHighlights
+} from "./exam-pipeline.js";
 import {
     getAllExamQuestions,
     buildSectionText,
@@ -91,7 +97,6 @@ const dom = {
     // Welcome & Exam Workspace
     emptyStateSection: $("emptyStateSection"),
     examWorkspace: $("examWorkspace"),
-    printExamHeaderMeta: $("printExamHeaderMeta"),
     examCodeBadge: $("examCodeBadge"),
     examDiffBadge: $("examDiffBadge"),
     examMetaSub: $("examMetaSub"),
@@ -100,6 +105,7 @@ const dom = {
     btnPrintFull: $("btnPrintFull"),
     btnModeView: $("btnModeView"),
     btnModePractice: $("btnModePractice"),
+    chkShowTechMeta: $("chkShowTechMeta"),
     toggleInlineAnswerWrap: $("toggleInlineAnswerWrap"),
     chkShowInlineAnswers: $("chkShowInlineAnswers"),
 
@@ -126,12 +132,16 @@ const dom = {
     practiceAnswerSheetGrid: $("practiceAnswerSheetGrid"),
     practiceResultBanner: $("practiceResultBanner"),
 
-    // Exam Render Targets
-    examSourcesStrip: $("examSourcesStrip"),
+    // Exam Paper Sheet & Render Targets
+    examPaperSheet: $("examPaperSheet"),
+    examOfficialHeader: $("examOfficialHeader"),
     examSectionsContainer: $("examSectionsContainer"),
     answersAndVocabSection: $("answersAndVocabSection"),
     btnToggleSolutions: $("btnToggleSolutions"),
     answersContainer: $("answersContainer"),
+    examSourcesCollapsible: $("examSourcesCollapsible"),
+    examSourcesCountBadge: $("examSourcesCountBadge"),
+    examSourcesStrip: $("examSourcesStrip"),
 
     // AI Modal
     aiSettingsModal: $("aiSettingsModal"),
@@ -186,6 +196,7 @@ const EXAM_DURATION_SEC = 50 * 60;
 
 const uiState = {
     workspaceMode: "view", // "view" | "practice"
+    showTechMeta: false, // Default OFF for clean BGDĐT exam sheet & PDF print
     showInlineAnswers: false,
     showSolutions: true,
     historyExpanded: true,
@@ -245,18 +256,30 @@ function formatTimerMMSS(totalSec) {
 }
 
 /**
- * Safely renders English reading passage markers:
- * - __sentence__ -> underlined paraphrase sentence
- * - **word** -> bold highlighted target word/pronoun
- * - [I], [II], [III], [IV] -> amber insertion marker pills
- * - (1) ______ .. (22) ______ -> clean cloze blank badges
+ * Safely renders official English exam typography & highlights:
+ * - (1) ______ .. (22) ______ -> seamless inline bold cloze blanks (protected first so underscores never collide)
+ * - __sentence__ / <u>sentence</u> -> underlined paraphrase sentence (<u class="paraphrase-underline">)
+ * - **word** / <b>word</b> / <strong>word</strong> -> bold highlighted target word/pronoun
+ * - [I], [II], [III], [IV] -> clean inline bold insertion markers
  */
 function formatEnglishRichHtml(raw) {
-    let html = escapeHtml(raw || "");
-    html = html.replace(/__([^_]+?)__/g, '<span class="paraphrase-underline">$1</span>');
+    const clozeTokens = [];
+    const withProtectedBlanks = String(raw || "").replace(/\((\d{1,2})\)\s*_{2,}/g, (_, num) => {
+        const idx = clozeTokens.length;
+        clozeTokens.push(num);
+        return `\uE000CLOZE${idx}\uE001`;
+    });
+
+    let html = escapeHtml(withProtectedBlanks);
+    html = html.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi, '<u class="paraphrase-underline">$1</u>');
+    html = html.replace(/&lt;(?:b|strong)&gt;([\s\S]*?)&lt;\/(?:b|strong)&gt;/gi, '<strong class="target-word">$1</strong>');
+    html = html.replace(/(^|[^_])__(?!_|\s)([^_]+?)__(?!_)/g, '$1<u class="paraphrase-underline">$2</u>');
     html = html.replace(/\*\*([^*]+?)\*\*/g, '<strong class="target-word">$1</strong>');
-    html = html.replace(/\[(I|II|III|IV)\]/g, '<span class="insert-marker">[$1]</span>');
-    html = html.replace(/\((\d{1,2})\)\s*_{2,}/g, '<span class="cloze-blank">($1) ______</span>');
+    html = html.replace(/\[(I|II|III|IV)\]/g, '<strong class="insert-marker">[$1]</strong>');
+    html = html.replace(/\uE000CLOZE(\d+)\uE001/g, (_, idx) => {
+        const num = clozeTokens[Number(idx)] || "";
+        return `<span class="cloze-blank">(${num})&nbsp;______</span>`;
+    });
     html = html.replace(/\n/g, "<br>");
     return html;
 }
@@ -858,6 +881,32 @@ function updateWorkspaceModeUI() {
     dom.answersAndVocabSection.classList.toggle("hidden", hideAnswersKey);
 }
 
+const DEFAULT_SECTION_INSTRUCTIONS = {
+    part1: "Read the following advertisement and mark the letter A, B, C, or D on your answer sheet to indicate the option that best fits each of the numbered blanks from 1 to 6.",
+    part2: "Read the following leaflet and mark the letter A, B, C, or D on your answer sheet to indicate the option that best fits each of the numbered blanks from 7 to 12.",
+    part3: "Mark the letter A, B, C, or D on your answer sheet to indicate the best arrangement of utterances or sentences to make a meaningful exchange or text in each of the following questions from 13 to 17.",
+    part4: "Read the following passage and mark the letter A, B, C, or D on your answer sheet to indicate the option that best fits each of the numbered blanks from 18 to 22.",
+    part5: "Read the following passage and mark the letter A, B, C, or D on your answer sheet to indicate the best answer to each of the following questions from 23 to 30.",
+    part6: "Read the following passage and mark the letter A, B, C, or D on your answer sheet to indicate the best answer to each of the following questions from 31 to 40."
+};
+
+function renderOfficialExamHeaderHtml(exam) {
+    const code = escapeHtml(exam.examCode || "401");
+    return `
+        <div class="exam-paper-header">
+            <div class="exam-header-left">
+                <div class="exam-header-kicker">KỲ THI TỐT NGHIỆP THPT NĂM 2026</div>
+                <div class="exam-header-subject">ĐỀ THI THỬ MÔN: TIẾNG ANH (GDPT 2018)</div>
+                <div class="exam-header-rule" aria-hidden="true"></div>
+            </div>
+            <div class="exam-header-right">
+                <div class="exam-header-duration">Thời gian làm bài: 50 phút, không kể thời gian phát đề</div>
+                <div class="exam-code-box">Mã đề thi: ${code}</div>
+            </div>
+        </div>
+    `;
+}
+
 function renderSourceBadgeInline(source) {
     if (!source || !source.sourceName) return "";
     const isRss = source.category === "rss";
@@ -869,13 +918,13 @@ function renderSourceBadgeInline(source) {
 
     if (source.sourceUrl) {
         return `
-            <a href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border hover:underline ${badgeCls}" title="Mở bài viết gốc: ${escapeHtml(source.originalTitle || source.sourceName)}">
-                <span>${icon} Nguồn thực tế: ${label}</span>
+            <a href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="tech-meta-only items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border hover:underline ${badgeCls}" title="Mở bài viết gốc: ${escapeHtml(source.originalTitle || source.sourceName)}">
+                <span>${icon} Nguồn: ${label}</span>
                 <span aria-hidden="true">↗</span>
             </a>
         `;
     }
-    return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${badgeCls}">${icon} ${label}</span>`;
+    return `<span class="tech-meta-only items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${badgeCls}">${icon} ${label}</span>`;
 }
 
 function renderQuestionCardHtml(q, isArrangement = false) {
@@ -887,75 +936,80 @@ function renderQuestionCardHtml(q, isArrangement = false) {
     const showExplain = (!isPractice && uiState.showInlineAnswers) || (isPractice && submitted);
 
     const options = [
-        { letter: "A", text: q.optionA },
-        { letter: "B", text: q.optionB },
-        { letter: "C", text: q.optionC },
-        { letter: "D", text: q.optionD }
+        { letter: "A", text: q.optionA || "" },
+        { letter: "B", text: q.optionB || "" },
+        { letter: "C", text: q.optionC || "" },
+        { letter: "D", text: q.optionD || "" }
     ];
 
-    const arrangementBody = isArrangement
+    const layoutClass = computeAdaptiveOptionLayout(options);
+    const cleanStem = isArrangement ? "" : cleanClozeQuestionPrompt(q.prompt, qNum);
+
+    const skillBadgeHtml = q.skillTag
+        ? `<span class="tech-meta-only question-skill-pill">${escapeHtml(q.skillTag)}</span>`
+        : "";
+
+    const practiceFeedbackHtml =
+        isPractice && submitted
+            ? chosen === correct
+                ? '<span class="no-print ml-2 font-sans text-xs font-extrabold text-emerald-700 dark:text-emerald-400">✓ Chính xác (+0,25đ)</span>'
+                : `<span class="no-print ml-2 font-sans text-xs font-extrabold text-rose-700 dark:text-rose-400">✕ ${chosen ? `Bạn chọn ${chosen}` : "Chưa chọn"} · Đúng: ${correct}</span>`
+            : "";
+
+    const headerLineHtml = `
+        <div class="question-header-line">
+            <span class="question-number-label">Question ${qNum}.</span>${cleanStem ? ` <span class="question-stem-text">${formatEnglishRichHtml(cleanStem)}</span>` : ""}${skillBadgeHtml}${practiceFeedbackHtml}
+        </div>
+    `;
+
+    const arrangementBodyHtml = isArrangement
         ? `
-            <div class="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 p-3.5 space-y-2 text-sm font-reading leading-relaxed text-slate-800 dark:text-slate-100">
-                ${q.salutation ? `<p class="font-semibold italic">${escapeHtml(q.salutation)}</p>` : ""}
-                <div class="space-y-1.5">
-                    ${(q.items || [])
-                        .map(
-                            (it) => `
-                        <div class="flex gap-2">
-                            <span class="font-mono font-bold text-sky-700 dark:text-sky-400 shrink-0">${escapeHtml(it.label)}.</span>
-                            <span>${formatEnglishRichHtml(it.text)}</span>
-                        </div>`
-                        )
-                        .join("")}
-                </div>
-                ${q.signOff ? `<p class="font-semibold italic whitespace-pre-line pt-1">${escapeHtml(q.signOff)}</p>` : ""}
+            <div class="arrangement-items">
+                ${q.salutation ? `<p class="arrangement-salutation">${escapeHtml(q.salutation)}</p>` : ""}
+                ${(q.items || [])
+                    .map(
+                        (it) => `
+                    <div class="arrangement-item-row">
+                        <span class="arrangement-item-label">${escapeHtml(it.label)}.</span>
+                        <span>${formatEnglishRichHtml(it.text)}</span>
+                    </div>`
+                    )
+                    .join("")}
+                ${q.signOff ? `<p class="arrangement-signoff">${escapeHtml(q.signOff)}</p>` : ""}
             </div>
           `
-        : `<p class="text-sm sm:text-[15px] font-semibold text-slate-900 dark:text-white leading-relaxed">${formatEnglishRichHtml(q.prompt)}</p>`;
+        : "";
 
-    const optionButtonsHtml = options
+    const optionItemsHtml = options
         .map((opt) => {
-            let boxCls =
-                "border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100";
-            let letterCls = "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200";
-
+            let stateCls = "";
             if (isPractice) {
                 if (submitted) {
                     if (opt.letter === correct) {
-                        boxCls =
-                            "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-100 ring-1 ring-emerald-500";
-                        letterCls = "bg-emerald-600 text-white";
+                        stateCls = "is-correct";
                     } else if (opt.letter === chosen && chosen !== correct) {
-                        boxCls =
-                            "border-rose-500 bg-rose-50 dark:bg-rose-950/50 text-rose-950 dark:text-rose-100 ring-1 ring-rose-500";
-                        letterCls = "bg-rose-600 text-white";
+                        stateCls = "is-wrong";
                     }
                 } else if (opt.letter === chosen) {
-                    boxCls =
-                        "border-sky-600 bg-sky-50 dark:bg-sky-950/50 text-sky-950 dark:text-sky-100 ring-1 ring-sky-600";
-                    letterCls = "bg-sky-700 text-white";
-                } else {
-                    boxCls += " hover:border-sky-400 dark:hover:border-sky-600 hover:bg-slate-50 dark:hover:bg-slate-800/70";
+                    stateCls = "is-selected";
                 }
             } else if (uiState.showInlineAnswers && opt.letter === correct) {
-                boxCls =
-                    "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100";
-                letterCls = "bg-emerald-600 text-white";
+                stateCls = "is-inline-correct";
             }
 
             if (isPractice) {
                 return `
-                    <button type="button" data-choose-answer="${qNum}:${opt.letter}" ${submitted ? "disabled" : ""} class="w-full text-left flex items-start gap-2.5 p-2.5 sm:p-3 rounded-xl border transition min-h-[44px] ${submitted ? "cursor-default" : "cursor-pointer"} ${boxCls}">
-                        <span class="w-6 h-6 rounded-lg font-mono text-xs font-extrabold flex items-center justify-center shrink-0 mt-0.5 ${letterCls}">${opt.letter}</span>
-                        <span class="text-xs sm:text-sm leading-relaxed break-words">${formatEnglishRichHtml(opt.text)}</span>
+                    <button type="button" data-choose-answer="${qNum}:${opt.letter}" ${submitted ? "disabled" : ""} class="exam-option-item is-interactive ${stateCls}">
+                        <span class="opt-letter">${opt.letter}.</span>
+                        <span class="opt-text">${formatEnglishRichHtml(opt.text)}</span>
                     </button>
                 `;
             }
 
             return `
-                <div class="flex items-start gap-2.5 p-2.5 rounded-xl border ${boxCls}">
-                    <span class="w-6 h-6 rounded-lg font-mono text-xs font-extrabold flex items-center justify-center shrink-0 mt-0.5 ${letterCls}">${opt.letter}</span>
-                    <span class="text-xs sm:text-sm leading-relaxed break-words">${formatEnglishRichHtml(opt.text)}</span>
+                <div class="exam-option-item ${stateCls}">
+                    <span class="opt-letter">${opt.letter}.</span>
+                    <span class="opt-text">${formatEnglishRichHtml(opt.text)}</span>
                 </div>
             `;
         })
@@ -963,33 +1017,19 @@ function renderQuestionCardHtml(q, isArrangement = false) {
 
     const explanationHtml = showExplain
         ? `
-            <div class="inline-explanation-box rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-3 text-xs leading-relaxed text-slate-700 dark:text-slate-200">
+            <div class="inline-explanation-box">
                 <span class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-600 text-white font-mono text-[11px] font-bold mr-1.5">Đáp án ${correct}</span>
                 ${escapeHtml(q.explanationVi || "")}
             </div>
           `
         : "";
 
-    const gridCols = isArrangement ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1 sm:grid-cols-2";
-
     return `
-        <article id="q-card-${qNum}" class="question-item-card rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 space-y-3">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="px-2 py-0.5 rounded-lg bg-slate-900 dark:bg-slate-700 text-white font-mono text-xs font-extrabold">Question ${qNum}</span>
-                    <span class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-semibold">${escapeHtml(q.skillTag || "")}</span>
-                </div>
-                ${
-                    isPractice && submitted
-                        ? chosen === correct
-                            ? '<span class="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">✓ Chính xác (+0,25đ)</span>'
-                            : `<span class="text-xs font-extrabold text-rose-700 dark:text-rose-400">✕ ${chosen ? `Bạn chọn ${chosen}` : "Chưa chọn"} · Đúng: ${correct}</span>`
-                        : ""
-                }
-            </div>
-            ${arrangementBody}
-            <div class="grid ${gridCols} gap-2">
-                ${optionButtonsHtml}
+        <article id="q-card-${qNum}" class="exam-question-block">
+            ${headerLineHtml}
+            ${arrangementBodyHtml}
+            <div class="exam-options-grid ${layoutClass}">
+                ${optionItemsHtml}
             </div>
             ${explanationHtml}
         </article>
@@ -1001,69 +1041,52 @@ function renderSectionBlockHtml(exam, meta) {
     if (!sec) return "";
 
     const sectionTxt = buildSectionText(exam, meta.id);
-    const headerAccent = {
-        sky: "bg-sky-800 dark:bg-sky-900",
-        teal: "bg-teal-800 dark:bg-teal-900",
-        amber: "bg-amber-700 dark:bg-amber-900",
-        emerald: "bg-emerald-800 dark:bg-emerald-900",
-        blue: "bg-blue-800 dark:bg-blue-900",
-        rose: "bg-slate-800 dark:bg-slate-800"
-    }[meta.accent] || "bg-slate-800";
+    const instructionText = sec.instruction || DEFAULT_SECTION_INSTRUCTIONS[meta.id] || "";
 
     let passageHtml = "";
     if (meta.id === "part1" || meta.id === "part2") {
-        const cardStyle =
-            meta.id === "part1"
-                ? "bg-sky-50/50 dark:bg-sky-950/20 border-sky-200 dark:border-sky-900"
-                : "bg-teal-50/50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-900";
+        const sourceBadge = renderSourceBadgeInline(sec.source);
         passageHtml = `
-            <div class="print-card rounded-2xl border p-4 sm:p-5 space-y-3 ${cardStyle}">
-                <div class="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                        <h4 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">${escapeHtml(sec.title || "")}</h4>
-                        ${sec.subtitle ? `<p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5">${escapeHtml(sec.subtitle)}</p>` : ""}
-                    </div>
-                    ${renderSourceBadgeInline(sec.source)}
-                </div>
-                <div class="font-reading text-[15px] sm:text-base leading-[1.85] text-slate-800 dark:text-slate-100">
+            <div class="cloze-boxed-passage">
+                ${sourceBadge ? `<div class="passage-meta-row tech-meta-block justify-end">${sourceBadge}</div>` : ""}
+                ${sec.title ? `<h4 class="passage-title">${escapeHtml(sec.title.toUpperCase())}</h4>` : ""}
+                ${sec.subtitle ? `<p class="passage-subtitle">${escapeHtml(sec.subtitle)}</p>` : ""}
+                <div class="cloze-passage-body">
                     ${formatEnglishRichHtml(sec.passage || "")}
                 </div>
             </div>
         `;
     } else if (meta.id === "part4") {
+        const sourceBadge = renderSourceBadgeInline(sec.source);
         passageHtml = `
-            <div class="print-card rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-3">
-                <div class="flex flex-wrap items-start justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-                    <h4 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">${escapeHtml(sec.title || "")}</h4>
-                    ${renderSourceBadgeInline(sec.source)}
-                </div>
-                <div class="font-reading text-[15px] sm:text-base leading-[1.9] text-slate-800 dark:text-slate-100">
+            <div class="exam-reading-passage">
+                ${sourceBadge ? `<div class="passage-meta-row tech-meta-block justify-end">${sourceBadge}</div>` : ""}
+                ${sec.title ? `<h4 class="passage-title">${escapeHtml(sec.title)}</h4>` : ""}
+                <div class="cloze-passage-body">
                     ${formatEnglishRichHtml(sec.passage || "")}
                 </div>
             </div>
         `;
     } else if (meta.id === "part5" || meta.id === "part6") {
-        const wordCount = (sec.paragraphs || []).join(" ").trim().split(/\s+/).filter(Boolean).length;
+        // Ensure bold keywords & underlined paraphrase sentences on both fresh and older IndexedDB exams
+        const safeParagraphs = ensureReadingPassageHighlights(sec.paragraphs || [], sec.questions || []);
+        const wordCount = safeParagraphs.join(" ").trim().split(/\s+/).filter(Boolean).length;
+        const sourceBadge = renderSourceBadgeInline(sec.source);
+
         passageHtml = `
-            <div class="print-card rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-4">
-                <div class="flex flex-wrap items-start justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <div class="space-y-1">
-                        <h4 class="text-base sm:text-xl font-extrabold text-slate-900 dark:text-white leading-snug">${escapeHtml(sec.title || "")}</h4>
-                        <p class="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                            ${(sec.paragraphs || []).length} đoạn văn · ~${wordCount} từ
-                            ${meta.id === "part6" ? " · Chứa 4 vị trí chèn câu [I]–[IV]" : ""}
-                        </p>
-                    </div>
-                    ${renderSourceBadgeInline(sec.source)}
+            <div class="exam-reading-passage">
+                <div class="passage-meta-row tech-meta-block">
+                    <span class="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                        ${safeParagraphs.length} đoạn văn · ~${wordCount} từ${meta.id === "part6" ? " · Chèn câu [I]–[IV]" : ""}
+                    </span>
+                    ${sourceBadge}
                 </div>
-                <div class="space-y-3.5 font-reading text-[15px] sm:text-[16.5px] leading-[1.88] text-slate-800 dark:text-slate-100">
-                    ${(sec.paragraphs || [])
+                ${sec.title ? `<h4 class="passage-title">${escapeHtml(sec.title)}</h4>` : ""}
+                <div>
+                    ${safeParagraphs
                         .map(
                             (p, pIdx) => `
-                        <p>
-                            <span class="no-print inline-block mr-1.5 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400 align-middle">P${pIdx + 1}</span>
-                            ${formatEnglishRichHtml(p)}
-                        </p>`
+                        <p class="reading-paragraph"><span class="tech-meta-only mr-1.5 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400 align-middle">P${pIdx + 1}</span>${formatEnglishRichHtml(p)}</p>`
                         )
                         .join("")}
                 </div>
@@ -1075,23 +1098,20 @@ function renderSectionBlockHtml(exam, meta) {
     const questionsHtml = (sec.questions || []).map((q) => renderQuestionCardHtml(q, isArrangement)).join("");
 
     return `
-        <section class="space-y-3" data-exam-section="${meta.id}">
-            <div class="rounded-2xl ${headerAccent} text-white px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-                <div class="space-y-0.5">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h3 class="text-sm sm:text-base font-extrabold tracking-tight">${escapeHtml(meta.title)}</h3>
-                        <span class="px-2 py-0.5 rounded bg-white/15 font-mono text-[11px] font-bold">${meta.range} · ${meta.points.toFixed(2).replace(".", ",")} điểm</span>
-                    </div>
-                    <p class="text-xs text-white/85 italic">${escapeHtml(sec.instruction || "")}</p>
-                </div>
-                <button type="button" data-copy-section="${meta.id}" class="no-print shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition cursor-pointer">
+        <section class="exam-section-block" data-exam-section="${meta.id}">
+            <div class="tech-meta-block items-center gap-2 mb-1 font-sans">
+                <span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-bold">${escapeHtml(meta.title)}</span>
+                <span class="font-mono text-[11px] text-slate-500 dark:text-slate-400">${meta.range} · ${meta.points.toFixed(2).replace(".", ",")} điểm</span>
+            </div>
+            <div class="exam-instruction-row">
+                <p class="exam-instruction">${escapeHtml(instructionText)}</p>
+                <button type="button" data-copy-section="${meta.id}" class="no-print section-copy-btn" title="Sao chép ${escapeHtml(meta.range)} (${formatCharCount(sectionTxt)})">
                     ${STACKED_SHEETS_SVG}
                     <span>Copy ${meta.range}</span>
-                    <span class="px-1.5 py-0.5 rounded bg-black/20 font-mono text-[10px]">${formatCharCount(sectionTxt)}</span>
                 </button>
             </div>
             ${passageHtml}
-            <div class="space-y-2.5">
+            <div class="exam-questions-list">
                 ${questionsHtml}
             </div>
         </section>
@@ -1105,7 +1125,7 @@ function renderAnswersAndVocabHtml(exam) {
     const keyCells = allQs
         .map(
             (q) => `
-            <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 p-2 text-center">
+            <div class="answer-key-cell rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 p-2 text-center">
                 <div class="text-[10px] font-mono text-slate-500 dark:text-slate-400">C${String(q.number).padStart(2, "0")}</div>
                 <div class="text-sm font-extrabold font-mono text-sky-700 dark:text-sky-400">${escapeHtml(q.correctOption)}</div>
             </div>`
@@ -1123,7 +1143,7 @@ function renderAnswersAndVocabHtml(exam) {
                     ${qs
                         .map(
                             (q) => `
-                        <div class="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 p-3 text-xs leading-relaxed text-slate-700 dark:text-slate-200">
+                        <div class="print-explain-item rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 p-3 text-xs leading-relaxed text-slate-700 dark:text-slate-200">
                             <span class="font-mono font-extrabold text-emerald-700 dark:text-emerald-400 mr-1">Câu ${q.number} (${escapeHtml(q.correctOption)})</span>
                             <span class="inline-block px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-[10px] font-semibold mr-1.5">${escapeHtml(q.skillTag || "")}</span>
                             <span>${escapeHtml(q.explanationVi || "")}</span>
@@ -1176,7 +1196,7 @@ function renderAnswersAndVocabHtml(exam) {
             <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 I. Bảng Đáp án nhanh (40 câu · 0,25 điểm/câu)
             </h4>
-            <div class="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
+            <div class="answer-key-grid grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
                 ${keyCells}
             </div>
         </div>
@@ -1210,11 +1230,12 @@ function renderExamWorkspace(exam, { preservePracticeState = false } = {}) {
 
     dom.emptyStateSection.classList.add("hidden");
     dom.examWorkspace.classList.remove("hidden");
+    dom.examWorkspace.classList.toggle("show-tech-meta", uiState.showTechMeta);
+    dom.chkShowTechMeta.checked = uiState.showTechMeta;
 
     dom.examCodeBadge.textContent = `MÃ ĐỀ: ${exam.examCode || "401"}`;
     dom.examDiffBadge.textContent = exam.difficultyLabel || "Chuẩn BGD (B1–B2)";
     dom.examMetaSub.textContent = `Tạo lúc ${formatDateTime(exam.createdAt)} · ${exam.totalQuestions || 40} câu · AI: ${exam.aiModelUsed || "AI"} · Kho "${storage.activeVaultKey}"`;
-    dom.printExamHeaderMeta.textContent = `Thời gian làm bài: 50 phút (không kể thời gian phát đề) · 40 câu trắc nghiệm · Mức độ: ${exam.difficultyLabel || "Chuẩn BGD"} · Mã đề: ${exam.examCode || "401"}`;
 
     // Update character counts on the 4 mobile-safe split copy buttons
     dom.charSlice1To17.textContent = formatCharCount(buildSlice1To17Text(exam));
@@ -1222,30 +1243,32 @@ function renderExamWorkspace(exam, { preservePracticeState = false } = {}) {
     dom.charSlice31To40.textContent = formatCharCount(buildSlice31To40Text(exam));
     dom.charSliceAnswers.textContent = formatCharCount(buildAnswersAndExplanationsText(exam));
 
-    // Authentic sources attribution strip
-    const sources = Array.isArray(exam.sourcesUsed) ? exam.sourcesUsed : [];
-    dom.examSourcesStrip.innerHTML = `
-        <div class="flex items-center justify-between gap-2">
-            <span class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Nguồn ngữ liệu Tiếng Anh thực tế đã kéo bằng 128-bit CSPRNG
-            </span>
-            <span class="text-[11px] font-mono text-slate-500 dark:text-slate-400">${sources.length} bài nguồn</span>
-        </div>
-        <div class="flex flex-wrap gap-2">
-            ${sources
-                .map((s) => {
-                    const label = `${s.section}: ${s.sourceName}`;
-                    if (s.sourceUrl) {
-                        return `<a href="${escapeHtml(s.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition">${escapeHtml(label)} ↗</a>`;
-                    }
-                    return `<span class="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${escapeHtml(label)}</span>`;
-                })
-                .join("")}
-        </div>
-    `;
+    // Official 2-column BGDĐT exam header & 6 clean exam sections inside #examPaperSheet
+    dom.examOfficialHeader.innerHTML = renderOfficialExamHeaderHtml(exam);
+    dom.examSectionsContainer.innerHTML =
+        EXAM_SECTIONS_META.map((meta) => renderSectionBlockHtml(exam, meta)).join("") +
+        `<div class="exam-end-divider">----------- HẾT -----------</div>`;
 
-    dom.examSectionsContainer.innerHTML = EXAM_SECTIONS_META.map((meta) => renderSectionBlockHtml(exam, meta)).join("");
     dom.answersContainer.innerHTML = renderAnswersAndVocabHtml(exam);
+
+    // Collapsible authentic sources attribution at bottom of page (hidden on print)
+    const sources = Array.isArray(exam.sourcesUsed) ? exam.sourcesUsed : [];
+    dom.examSourcesCountBadge.textContent = `${sources.length} bài nguồn`;
+    dom.examSourcesStrip.innerHTML =
+        sources.length > 0
+            ? `
+            <div class="flex flex-wrap gap-2">
+                ${sources
+                    .map((s) => {
+                        const label = `${s.section}: ${s.sourceName}`;
+                        if (s.sourceUrl) {
+                            return `<a href="${escapeHtml(s.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition" title="${escapeHtml(s.originalTitle || label)}">${escapeHtml(label)} ↗</a>`;
+                        }
+                        return `<span class="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${escapeHtml(label)}</span>`;
+                    })
+                    .join("")}
+            </div>`
+            : `<p class="text-xs text-slate-500 dark:text-slate-400">Không có dữ liệu bài nguồn đính kèm cho đề này.</p>`;
 
     updateWorkspaceModeUI();
     updatePracticeAnswerSheet();
@@ -1351,15 +1374,27 @@ function handlePrintClean(examOnly = false) {
         const block = $("detailedSolutionsBlock");
         if (block) block.classList.remove("hidden");
     }
-    setTimeout(() => {
-        window.print();
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         document.body.classList.remove("print-exam-only");
         if (!examOnly && !prevShowSolutions) {
             uiState.showSolutions = false;
             const block = $("detailedSolutionsBlock");
             if (block) block.classList.add("hidden");
         }
-    }, 120);
+    };
+
+    window.addEventListener("afterprint", cleanup, { once: true });
+    setTimeout(() => {
+        window.print();
+        // Desktop browsers block during window.print(); schedule gentle post-print fallback
+        setTimeout(() => {
+            if (!document.hidden) cleanup();
+        }, 600);
+    }, 100);
 }
 
 // =========================================================================
@@ -1627,6 +1662,11 @@ function bindEvents() {
         });
     });
 
+    dom.chkShowTechMeta.addEventListener("change", () => {
+        uiState.showTechMeta = dom.chkShowTechMeta.checked;
+        dom.examWorkspace.classList.toggle("show-tech-meta", uiState.showTechMeta);
+    });
+
     dom.chkShowInlineAnswers.addEventListener("change", () => {
         uiState.showInlineAnswers = dom.chkShowInlineAnswers.checked;
         if (uiState.currentExam) {
@@ -1703,20 +1743,7 @@ function bindEvents() {
             if (card) {
                 card.querySelectorAll("[data-choose-answer]").forEach((btn) => {
                     const [, btnLetter] = btn.dataset.chooseAnswer.split(":");
-                    const isSelected = btnLetter === letter;
-                    btn.className = `w-full text-left flex items-start gap-2.5 p-2.5 sm:p-3 rounded-xl border transition min-h-[44px] cursor-pointer ${
-                        isSelected
-                            ? "border-sky-600 bg-sky-50 dark:bg-sky-950/50 text-sky-950 dark:text-sky-100 ring-1 ring-sky-600"
-                            : "border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-sky-400 dark:hover:border-sky-600 hover:bg-slate-50 dark:hover:bg-slate-800/70"
-                    }`;
-                    const badge = btn.querySelector("span:first-child");
-                    if (badge) {
-                        badge.className = `w-6 h-6 rounded-lg font-mono text-xs font-extrabold flex items-center justify-center shrink-0 mt-0.5 ${
-                            isSelected
-                                ? "bg-sky-700 text-white"
-                                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-                        }`;
-                    }
+                    btn.classList.toggle("is-selected", btnLetter === letter);
                 });
             }
             updatePracticeAnswerSheet();

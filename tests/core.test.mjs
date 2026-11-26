@@ -36,10 +36,15 @@ import {
 } from "../public/js/harvester.js";
 import {
     runFullEnglishExamPipeline,
-    gradeInteractiveExam
+    gradeInteractiveExam,
+    computeAdaptiveOptionLayout,
+    cleanClozeQuestionPrompt,
+    ensureReadingPassageHighlights,
+    shuffleArrangementQuestion
 } from "../public/js/exam-pipeline.js";
 import { parseFirebaseConfigInput } from "../public/js/storage.js";
 import {
+    formatPassageForPlainText,
     buildSlice1To17Text,
     buildSlice18To30Text,
     buildSlice31To40Text,
@@ -551,21 +556,30 @@ test("Sequential 4-pass English exam pipeline generates all 40 questions (6 part
     assert.equal(graded.score, 8);
     assert.equal(graded.sectionBreakdown.length, 6);
 
+    // Part 3 questions must never keep pre-ordered identity sequences (a-b-c / a-b-c-d-e)
+    for (const q of exam.part3.questions) {
+        const correctSeq = q[`option${q.correctOption}`];
+        assert.notEqual(correctSeq, "a-b-c");
+        assert.notEqual(correctSeq, "a-b-c-d-e");
+    }
+
     // Mobile-safe split copy serializers & .txt export check
     const s1 = buildSlice1To17Text(exam);
-    assert.ok(s1.includes("Question 1:"));
-    assert.ok(s1.includes("Question 17:"));
-    assert.equal(s1.includes("Question 18:"), false);
+    assert.ok(s1.includes("Question 1."));
+    assert.ok(s1.includes("Question 17."));
+    assert.ok(s1.includes("(1) ______"));
+    assert.ok(s1.includes("(2) ______"));
+    assert.equal(s1.includes("Question 18."), false);
 
     const s2 = buildSlice18To30Text(exam);
-    assert.ok(s2.includes("Question 18:"));
-    assert.ok(s2.includes("Question 30:"));
+    assert.ok(s2.includes("Question 18."));
+    assert.ok(s2.includes("Question 30."));
     assert.ok(s2.includes("https://example.org/rss:npr:303"));
-    assert.equal(s2.includes("Question 31:"), false);
+    assert.equal(s2.includes("Question 31."), false);
 
     const s3 = buildSlice31To40Text(exam);
-    assert.ok(s3.includes("Question 31:"));
-    assert.ok(s3.includes("Question 40:"));
+    assert.ok(s3.includes("Question 31."));
+    assert.ok(s3.includes("Question 40."));
     assert.ok(s3.includes("[I]"));
     assert.ok(s3.includes("https://example.org/epmc:PMC404"));
 
@@ -575,9 +589,182 @@ test("Sequential 4-pass English exam pipeline generates all 40 questions (6 part
     assert.ok(sAns.includes("pivotal"));
 
     const fullTxt = buildFullTxtExamDocument(exam);
-    assert.ok(fullTxt.includes("MÔN TIẾNG ANH"));
+    assert.ok(fullTxt.includes("MÔN: TIẾNG ANH"));
     assert.ok(fullTxt.includes("QĐ 764/QĐ-BGDĐT"));
     assert.equal(fullTxt.includes("\\documentclass"), false, "Must contain zero LaTeX math code");
+});
+
+test("Adaptive option grid, cloze prompt cleaner, and plain-text cloze blank preservation work cleanly", () => {
+    // Adaptive Option Grid thresholds: <=20 (4 cols), 21-55 (2 cols), >55 (1 col)
+    assert.equal(computeAdaptiveOptionLayout(["exciting", "excited", "excitement", "excitedly"]), "opt-grid-4");
+    assert.equal(computeAdaptiveOptionLayout(["a-b-c-d-e", "c-a-e-b-d", "d-b-a-c-e", "b-e-c-a-d"]), "opt-grid-4");
+    assert.equal(
+        computeAdaptiveOptionLayout([
+            "renewable energy initiatives",
+            "local community volunteer programs",
+            "sustainable urban transport",
+            "green architectural innovation"
+        ]),
+        "opt-grid-2"
+    );
+    assert.equal(
+        computeAdaptiveOptionLayout([
+            "which has significantly lowered urban summer heatwaves across metropolitan districts",
+            "having dramatically transformed public transit schedules over the past decade",
+            "that many municipal leaders initially doubted would attract external funding",
+            "although early pilot studies suggested moderate seasonal variations in cooling"
+        ]),
+        "opt-grid-1"
+    );
+    // Formatting markers shouldn't inflate character length unnecessarily
+    assert.equal(computeAdaptiveOptionLayout(["**pivotal**", "**minor**", "**trivial**", "**brief**"]), "opt-grid-4");
+
+    // Cloze prompt cleaner strips redundant Q1-12 boilerplate & duplicate prefixes on Q23-40
+    assert.equal(cleanClozeQuestionPrompt("Question 1 (Word formation — Blank 1):", 1), "");
+    assert.equal(cleanClozeQuestionPrompt("Question 12 (Vocabulary — Blank 12): Choose best option", 12), "");
+    assert.equal(cleanClozeQuestionPrompt("Question 18 (Blank 18):", 18), "");
+    assert.equal(
+        cleanClozeQuestionPrompt("Question 23: Which of the following is NOT mentioned in paragraph 2?", 23),
+        "Which of the following is NOT mentioned in paragraph 2?"
+    );
+
+    // Consecutive cloze blanks (1) ______ ... (2) ______ must never be corrupted by __underline__ regex
+    const clozePlain = formatPassageForPlainText(
+        "Join our (1) ______ event in (2) ______ park and __enjoy a special workshop__ with **experts**."
+    );
+    assert.ok(clozePlain.includes("(1) ______ event in (2) ______ park"));
+    assert.ok(clozePlain.includes("«enjoy a special workshop»"));
+    assert.ok(clozePlain.includes("**experts**"));
+});
+
+test("ensureReadingPassageHighlights auto-bolds target words and auto-underlines paraphrase sentences when AI omits markup", () => {
+    const rawParagraphs = [
+        "Urban micro-forests planted with native species grow remarkably resilient over their first decade, and they absorb stormwater rapidly.",
+        "Municipal planners initially hesitated because purchasing dense downtown lots seemed prohibitively expensive for small districts. However, pocket parks soon proved cost-effective by curbing flood damage.",
+        "Critics worried local biodiversity would <b>dwindle</b>, yet surveys documented triple the songbird species."
+    ];
+
+    const questions = [
+        {
+            number: 24,
+            skillTag: "Vocabulary (CLOSEST)",
+            prompt: 'The word "resilient" in paragraph 1 is CLOSEST in meaning to _______.',
+            targetPhrase: "resilient",
+            targetParagraph: 1,
+            optionA: "hardy",
+            optionB: "fragile",
+            optionC: "remote",
+            optionD: "costly",
+            correctOption: "A"
+        },
+        {
+            number: 25,
+            skillTag: "Pronoun reference",
+            prompt: 'The word "they" in paragraph 1 refers to _______.',
+            optionA: "planners",
+            optionB: "urban micro-forests",
+            optionC: "districts",
+            optionD: "songbirds",
+            correctOption: "B"
+        },
+        {
+            number: 26,
+            skillTag: "Paraphrase sentence",
+            prompt: "Which of the following best paraphrases the underlined sentence in paragraph 2?",
+            // Deliberately omit targetPhrase & __...__ markup to test token-overlap auto-underline fallback!
+            optionA: "City officials were reluctant at first since acquiring compact urban land appeared too costly for smaller areas.",
+            optionB: "Downtown districts refused to accept donations of unused private lots.",
+            optionC: "Small municipalities banned pocket parks because of high water bills.",
+            optionD: "Planners spent a decade studying storm drains before planting trees.",
+            correctOption: "A"
+        }
+    ];
+
+    const repaired = ensureReadingPassageHighlights(rawParagraphs, questions);
+    assert.ok(repaired[0].includes("**resilient**"), "Missing CLOSEST target word must be auto-bolded");
+    assert.ok(repaired[0].includes("**they**"), "Missing pronoun target word must be auto-bolded");
+    assert.ok(
+        repaired[1].includes("__Municipal planners initially hesitated because purchasing dense downtown lots seemed prohibitively expensive for small districts.__"),
+        "Missing paraphrase sentence must be auto-underlined via token overlap"
+    );
+    assert.ok(repaired[2].includes("**dwindle**"), "HTML <b> tags must normalize cleanly to **...**");
+});
+
+test("shuffleArrangementQuestion enforces CSPRNG non-identity shuffle, exact key bijection, and Q15 letter framing", () => {
+    const original3 = [
+        "Hi Nam, did you finish the renewable energy slides?",
+        "Yes, I just uploaded them to our shared folder this morning.",
+        "Awesome, I will review the charts before tomorrow's presentation."
+    ];
+    const original5 = [
+        "Thanks so much for inviting me to the robotics showcase last weekend.",
+        "I was genuinely amazed by how smoothly your team's prototype navigated the obstacle course.",
+        "Your explanation of the sensor calibration also gave me great ideas for our school club.",
+        "Next month, we are hosting a small tech fair and would love for you to visit.",
+        "Let me know if you are free on Saturday afternoon so I can reserve a guest pass."
+    ];
+
+    for (let run = 0; run < 30; run++) {
+        // 3-item short dialogue (Q13) given pre-ordered a-b-c by AI
+        const q13 = shuffleArrangementQuestion(
+            {
+                number: 13,
+                subtype: "dialogue_short",
+                skillTag: "Sắp xếp hội thoại ngắn",
+                items: original3.map((text, idx) => ({ label: String.fromCharCode(97 + idx), text })),
+                optionA: "a-b-c",
+                optionB: "b-a-c",
+                optionC: "c-a-b",
+                optionD: "a-c-b",
+                correctOption: "A",
+                explanationVi: "Thứ tự đúng: a-b-c. Mở đầu hỏi tiến độ, trả lời đã nộp, cảm ơn."
+            },
+            13,
+            "dialogue_short"
+        );
+
+        const q13CorrectSeq = q13[`option${q13.correctOption}`];
+        assert.notEqual(q13CorrectSeq, "a-b-c", "Q13 must NEVER stay pre-ordered a-b-c");
+        const q13Opts = new Set([q13.optionA, q13.optionB, q13.optionC, q13.optionD]);
+        assert.equal(q13Opts.size, 4, "Q13 must have 4 unique permutation options");
+        assert.ok(q13.explanationVi.startsWith(`Thứ tự đúng: ${q13CorrectSeq}.`), "Q13 explanation must sync with shuffled key");
+
+        const q13Map = new Map(q13.items.map((it) => [it.label, it.text]));
+        const q13Reconstructed = q13CorrectSeq.split("-").map((lbl) => q13Map.get(lbl));
+        assert.deepEqual(q13Reconstructed, original3, "Q13 shuffled key must reconstruct original chronological dialogue");
+
+        // 5-item letter (Q15) given pre-ordered a-b-c-d-e and missing salutation/signOff
+        const q15 = shuffleArrangementQuestion(
+            {
+                number: 15,
+                subtype: "letter",
+                skillTag: "Sắp xếp thư / email",
+                salutation: "",
+                signOff: "",
+                items: original5.map((text, idx) => ({ label: String.fromCharCode(97 + idx), text })),
+                optionA: "a-b-c-d-e",
+                optionB: "b-a-c-d-e",
+                optionC: "a-c-b-d-e",
+                optionD: "d-a-b-c-e",
+                correctOption: "A",
+                explanationVi: "Mở thư cảm ơn, khen nguyên mẫu, nêu bài học, mời dự hội chợ và chốt lịch."
+            },
+            15,
+            "letter"
+        );
+
+        const q15CorrectSeq = q15[`option${q15.correctOption}`];
+        assert.notEqual(q15CorrectSeq, "a-b-c-d-e", "Q15 must NEVER stay pre-ordered a-b-c-d-e");
+        const q15Opts = new Set([q15.optionA, q15.optionB, q15.optionC, q15.optionD]);
+        assert.equal(q15Opts.size, 4, "Q15 must have 4 unique permutation options");
+        assert.ok(q15.salutation.length >= 4, "Q15 letter must always include salutation");
+        assert.ok(q15.signOff.length >= 4, "Q15 letter must always include signOff");
+        assert.ok(q15.explanationVi.startsWith(`Thứ tự đúng: ${q15CorrectSeq}.`), "Q15 explanation must sync with shuffled key");
+
+        const q15Map = new Map(q15.items.map((it) => [it.label, it.text]));
+        const q15Reconstructed = q15CorrectSeq.split("-").map((lbl) => q15Map.get(lbl));
+        assert.deepEqual(q15Reconstructed, original5, "Q15 shuffled key must reconstruct original chronological letter");
+    }
 });
 
 test("HTTP server serves clean English frontend (zero KaTeX/Math) and secures /api/health, /api/ai, /api/harvest", async () => {
@@ -592,6 +779,8 @@ test("HTTP server serves clean English frontend (zero KaTeX/Math) and secures /a
         const html = await homeRes.text();
         assert.ok(html.includes("THPTQG 2026 Tiếng Anh"));
         assert.ok(html.includes("cdn.tailwindcss.com"));
+        assert.ok(html.includes("chkShowTechMeta"));
+        assert.ok(html.includes("examPaperSheet"));
         assert.equal(/katex/i.test(html), false, "HTML must not include KaTeX");
         assert.equal(/\.tex\b/i.test(html), false, "HTML must not include .tex math export");
 
