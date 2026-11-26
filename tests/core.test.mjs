@@ -27,6 +27,7 @@ import {
 import {
     parseRobustJson,
     getFallbackCandidateModels,
+    isTransientNetworkError,
     UnifiedAiClient
 } from "../public/js/ai-client.js";
 import {
@@ -233,6 +234,36 @@ test("JSON parser, Gemini payload rules, and model fallback cooldown work reliab
     const fb = parseFirebaseConfigInput(`const firebaseConfig = { apiKey: "abc", projectId: "demo-eng" };`);
     assert.equal(fb.ok, true);
     assert.equal(fb.config.projectId, "demo-eng");
+});
+
+test("UnifiedAiClient detects Failed to fetch network errors and seamlessly falls back to same-origin /api/ai proxy", async () => {
+    assert.equal(isTransientNetworkError(new TypeError("Failed to fetch")), true);
+    assert.equal(isTransientNetworkError(new Error("Load failed")), true);
+    assert.equal(isTransientNetworkError(new Error("Invalid API key")), false);
+
+    const client = new UnifiedAiClient();
+    client.settings.provider = "gemini";
+    client.settings.models.gemini = "gemini-3.5-flash-lite";
+    client.settings.keys.gemini = "dummy-browser-key";
+    client.settings.autoFallback = true;
+    client.serverHealth.proxyAvailable = true;
+
+    let directCalls = 0;
+    let proxyCalls = 0;
+    client._callDirectGemini = async () => {
+        directCalls++;
+        throw new TypeError("Failed to fetch");
+    };
+    client._callViaServerProxy = async ({ model }) => {
+        proxyCalls++;
+        return { ok: true, provider: "gemini", model, text: '{"recovered":true}', groundingLinks: [] };
+    };
+
+    const res = await client.generate({ prompt: "Pass 2" });
+    assert.equal(directCalls, 1);
+    assert.equal(proxyCalls, 1);
+    assert.equal(res.model, "gemini-3.5-flash-lite");
+    assert.equal(res.text, '{"recovered":true}');
 });
 
 test("EnglishSourceHarvester routes RSS through /api/harvest and skips already-used Source IDs", async () => {

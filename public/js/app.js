@@ -1305,6 +1305,15 @@ async function handleGenerateExam() {
         dom.btnGenerateLabel.textContent = `Đang kéo Nguồn & Biên soạn... (${secs}s)`;
     }, 1000);
 
+    let wakeLock = null;
+    try {
+        if (typeof navigator !== "undefined" && navigator.wakeLock?.request) {
+            wakeLock = await navigator.wakeLock.request("screen");
+        }
+    } catch {
+        // Ignore if browser or battery saver denies Wake Lock
+    }
+
     try {
         const examDoc = await runFullEnglishExamPipeline({
             aiClient,
@@ -1330,6 +1339,13 @@ async function handleGenerateExam() {
             openAiSettingsModal();
         }
     } finally {
+        if (wakeLock) {
+            try {
+                await wakeLock.release();
+            } catch {
+                // ignore
+            }
+        }
         clearInterval(elapsedTimer);
         uiState.isGenerating = false;
         dom.btnGenerateExam.disabled = false;

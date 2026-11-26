@@ -150,6 +150,16 @@ export function saveAiSettings(settings) {
     }
 }
 
+export function isTransientNetworkError(err) {
+    if (!err) return false;
+    if (err.isNetworkError) return true;
+    const msg = String(err.message || "");
+    return (
+        err.name === "TypeError" ||
+        /failed to fetch|networkerror|load failed|network request failed|err_network|socket|connection/i.test(msg)
+    );
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -166,6 +176,10 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
             timeoutErr.retryable = true;
             timeoutErr.isTimeout = true;
             throw timeoutErr;
+        }
+        if (isTransientNetworkError(err)) {
+            err.isNetworkError = true;
+            err.retryable = true;
         }
         throw err;
     }
@@ -479,7 +493,7 @@ export class UnifiedAiClient {
                 responseSchema,
                 useGoogleSearch,
                 thinkingLevel,
-                timeoutMs
+                timeoutMs: Math.min(53000, timeoutMs)
             });
         }
 
@@ -492,28 +506,54 @@ export class UnifiedAiClient {
             throw err;
         }
 
-        if (provider === "gemini") {
-            return this._callDirectGemini({
+        const directCall = () => {
+            if (provider === "gemini") {
+                return this._callDirectGemini({
+                    model,
+                    apiKey: browserKey,
+                    systemInstruction,
+                    prompt,
+                    responseSchema,
+                    useGoogleSearch,
+                    thinkingLevel,
+                    timeoutMs
+                });
+            }
+            return this._callDirectOpenAICompat({
+                provider,
                 model,
                 apiKey: browserKey,
                 systemInstruction,
                 prompt,
                 responseSchema,
-                useGoogleSearch,
-                thinkingLevel,
                 timeoutMs
             });
-        }
+        };
 
-        return this._callDirectOpenAICompat({
-            provider,
-            model,
-            apiKey: browserKey,
-            systemInstruction,
-            prompt,
-            responseSchema,
-            timeoutMs
-        });
+        try {
+            return await directCall();
+        } catch (err) {
+            // On mobile Chrome / ISP / Google edge 502 without CORS headers, direct browser fetch throws
+            // TypeError: Failed to fetch. Fall back seamlessly to same-origin /api/ai proxy when available.
+            if (isTransientNetworkError(err) && this.serverHealth.proxyAvailable) {
+                this.onLog(
+                    `[Mạng/CORS] Kết nối trực tiếp tới ${provider}/${model} bị gián đoạn (${err.message}) → Tự chuyển qua Server Proxy /api/ai...`,
+                    "warn"
+                );
+                await new Promise((r) => setTimeout(r, 900));
+                return this._callViaServerProxy({
+                    provider,
+                    model,
+                    systemInstruction,
+                    prompt,
+                    responseSchema,
+                    useGoogleSearch,
+                    thinkingLevel,
+                    timeoutMs: Math.min(53000, timeoutMs)
+                });
+            }
+            throw err;
+        }
     }
 
     async generate({ systemInstruction = "", prompt, responseSchema = null, useGoogleSearch = false, maxRetriesPerModel = 1 }) {
@@ -526,15 +566,23 @@ export class UnifiedAiClient {
 
         const allowSearch = Boolean(useGoogleSearch && provider === "gemini" && this.settings.useGoogleSearchFallback);
         const thinkingLevel = provider === "gemini" ? this.settings.thinkingLevel || "LOW" : null;
+        const browserKey = this.getBrowserKey(provider);
+        const isServerProxyPrimary = !browserKey && this.hasServerKeyFor(provider);
 
         let lastError = null;
         for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
             const model = candidateModels[mIdx];
             const hasMoreCandidates = mIdx < candidateModels.length - 1;
-            // Balanced per-pass timeout safely below Vercel 60s Serverless Function ceiling
-            const timeoutMs = hasMoreCandidates ? 34000 : 48000;
-            const retriesForThisModel = hasMoreCandidates ? 0 : Math.max(0, maxRetriesPerModel);
-            let delayMs = 1500;
+            // Direct browser BYOK has no Vercel 60s cap; Server Proxy stays safely under Vercel 60s maxDuration
+            const timeoutMs = isServerProxyPrimary
+                ? hasMoreCandidates
+                    ? 46000
+                    : 53000
+                : hasMoreCandidates
+                  ? 52000
+                  : 65000;
+            const retriesForThisModel = hasMoreCandidates ? 1 : Math.max(1, maxRetriesPerModel);
+            let delayMs = 1800;
 
             for (let attempt = 0; attempt <= retriesForThisModel; attempt++) {
                 try {
@@ -565,6 +613,7 @@ export class UnifiedAiClient {
                         throw err;
                     }
 
+                    const isNetwork = isTransientNetworkError(err);
                     const isTimeout = Boolean(err.isTimeout || err.name === "AbortError" || err.status === 504);
                     const isOverloadedOrLimited = err.status === 429 || err.status >= 500 || isTimeout;
 
@@ -572,6 +621,27 @@ export class UnifiedAiClient {
                         this.markModelCooldown(provider, model, 600000);
                         if (hasMoreCandidates) {
                             this.onLog(`[AI Tự động] Model "${model}" không khả dụng (404) → chuyển sang "${candidateModels[mIdx + 1]}"...`, "warn");
+                            break;
+                        }
+                        break;
+                    }
+
+                    if (isNetwork) {
+                        if (attempt < retriesForThisModel) {
+                            this.onLog(
+                                `[AI Mạng] Kết nối tới "${model}" tạm gián đoạn (${err.message}) → Chờ ${(delayMs / 1000).toFixed(1)}s rồi thử lại...`,
+                                "warn"
+                            );
+                            await new Promise((r) => setTimeout(r, delayMs));
+                            delayMs = Math.min(4000, delayMs + 1200);
+                            continue;
+                        }
+                        if (hasMoreCandidates) {
+                            this.onLog(
+                                `[AI Mạng] "${model}" vẫn gián đoạn mạng → Chờ 1.5s và chuyển sang "${candidateModels[mIdx + 1]}"...`,
+                                "warn"
+                            );
+                            await new Promise((r) => setTimeout(r, 1500));
                             break;
                         }
                         break;

@@ -14,7 +14,7 @@ import {
     evaluateContentIntegrity,
     isNewsRssSourceId
 } from "./crypto-dedup.js";
-import { parseRobustJson } from "./ai-client.js";
+import { parseRobustJson, isTransientNetworkError } from "./ai-client.js";
 
 /**
  * Sequential 4-Pass English Exam Compiler (QĐ 764/QĐ-BGDĐT · GDPT 2018)
@@ -24,7 +24,23 @@ import { parseRobustJson } from "./ai-client.js";
  * - Mandatory CSPRNG shuffle for Part 3 (Q13–17) & auto-repair of Reading Highlights (Part 5–6)
  */
 
-const QUESTION_ITEM_SCHEMA = {
+const CLOZE_QUESTION_ITEM_SCHEMA = {
+    type: "OBJECT",
+    properties: {
+        number: { type: "INTEGER" },
+        skillTag: { type: "STRING" },
+        prompt: { type: "STRING" },
+        optionA: { type: "STRING" },
+        optionB: { type: "STRING" },
+        optionC: { type: "STRING" },
+        optionD: { type: "STRING" },
+        correctOption: { type: "STRING" },
+        explanationVi: { type: "STRING" }
+    },
+    required: ["number", "skillTag", "prompt", "optionA", "optionB", "optionC", "optionD", "correctOption", "explanationVi"]
+};
+
+const READING_QUESTION_ITEM_SCHEMA = {
     type: "OBJECT",
     properties: {
         number: { type: "INTEGER" },
@@ -64,7 +80,7 @@ const PASS1_SCHEMA = {
                 title: { type: "STRING" },
                 subtitle: { type: "STRING" },
                 passage: { type: "STRING" },
-                questions: { type: "ARRAY", items: QUESTION_ITEM_SCHEMA }
+                questions: { type: "ARRAY", items: CLOZE_QUESTION_ITEM_SCHEMA }
             },
             required: ["instruction", "title", "passage", "questions"]
         },
@@ -75,7 +91,7 @@ const PASS1_SCHEMA = {
                 title: { type: "STRING" },
                 subtitle: { type: "STRING" },
                 passage: { type: "STRING" },
-                questions: { type: "ARRAY", items: QUESTION_ITEM_SCHEMA }
+                questions: { type: "ARRAY", items: CLOZE_QUESTION_ITEM_SCHEMA }
             },
             required: ["instruction", "title", "passage", "questions"]
         },
@@ -130,7 +146,7 @@ const PASS2_SCHEMA = {
                 instruction: { type: "STRING" },
                 title: { type: "STRING" },
                 passage: { type: "STRING" },
-                questions: { type: "ARRAY", items: QUESTION_ITEM_SCHEMA }
+                questions: { type: "ARRAY", items: CLOZE_QUESTION_ITEM_SCHEMA }
             },
             required: ["instruction", "title", "passage", "questions"]
         },
@@ -148,7 +164,7 @@ const PASS3_SCHEMA = {
                 instruction: { type: "STRING" },
                 title: { type: "STRING" },
                 paragraphs: { type: "ARRAY", items: { type: "STRING" } },
-                questions: { type: "ARRAY", items: QUESTION_ITEM_SCHEMA }
+                questions: { type: "ARRAY", items: READING_QUESTION_ITEM_SCHEMA }
             },
             required: ["instruction", "title", "paragraphs", "questions"]
         },
@@ -166,7 +182,7 @@ const PASS4_SCHEMA = {
                 instruction: { type: "STRING" },
                 title: { type: "STRING" },
                 paragraphs: { type: "ARRAY", items: { type: "STRING" } },
-                questions: { type: "ARRAY", items: QUESTION_ITEM_SCHEMA }
+                questions: { type: "ARRAY", items: READING_QUESTION_ITEM_SCHEMA }
             },
             required: ["instruction", "title", "paragraphs", "questions"]
         },
@@ -1045,7 +1061,7 @@ Trích xuất 6–8 từ vựng / collocation / academic expression tiêu biểu
 
 async function runPassWithAutoRetry(passLabel, fn, onLog) {
     let lastErr = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
         try {
             return await fn();
         } catch (err) {
@@ -1053,9 +1069,18 @@ async function runPassWithAutoRetry(passLabel, fn, onLog) {
             if (err?.code === "MISSING_API_KEY" || err?.status === 401 || err?.status === 403) {
                 throw err;
             }
-            if (attempt === 0) {
-                onLog(`[Tự phục hồi ${passLabel}] Phản hồi chưa chuẩn (${err.message}) → Tự biên soạn lại lượt này...`, "warn");
+            const isNet = isTransientNetworkError(err);
+            const maxRetries = isNet ? 2 : 1;
+            if (attempt < maxRetries) {
+                const waitMs = isNet ? (attempt === 0 ? 2500 : 4500) : 350;
+                onLog(
+                    `[Tự phục hồi ${passLabel}] ${isNet ? "Mạng tạm gián đoạn" : "Phản hồi chưa chuẩn"} (${err.message}) → Chờ ${(waitMs / 1000).toFixed(1)}s rồi tự biên soạn lại lượt này...`,
+                    "warn"
+                );
+                await new Promise((r) => setTimeout(r, waitMs));
+                continue;
             }
+            break;
         }
     }
     throw lastErr;
